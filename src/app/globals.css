@@ -1,0 +1,55 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&family=Bebas+Neue&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --color-richy-gold: #FFD700;
+  --color-richy-gold-light: #FFED4E;
+  --color-richy-black: #0A0A0A;
+  --color-richy-black-soft: #1A1A1A;
+  
+  --font-display: 'Bebas Neue', sans-serif;
+}
+
+@layer base {
+  :root {
+    --richy-gold: #FFD700;
+    --richy-black: #0A0A0A;
+    --richy-black-soft: #1A1A1A;
+    --richy-gold-light: #FFED4E;
+  }
+  
+  body {
+    @apply text-white bg-richy-black;
+  }
+}
+
+@layer components {
+  .btn-richy {
+    @apply font-bold py-3 px-6 rounded-lg hover:scale-105 transition-all duration-200 shadow-lg;
+    background: linear-gradient(to right, var(--richy-gold), var(--richy-gold-light));
+    color: var(--richy-black);
+  }
+  
+  .card-richy {
+    @apply border rounded-xl p-6 backdrop-blur-sm;
+    background-color: var(--richy-black-soft);
+    border-color: rgba(255, 215, 0, 0.2);
+  }
+}
+
+@layer utilities {
+  @keyframes slide-up {
+    from {
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  .animate-slide-up {
+    animation: slide-up 0.5s ease-out;
+  }
+}
