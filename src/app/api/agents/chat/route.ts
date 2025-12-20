@@ -9,6 +9,20 @@ const groq = new Groq({
 
 const RICHY_CHAT_PROMPT = `Tu es Richy, entrepreneur qui a monté plusieurs boîtes. Tu parles comme un entrepreneur français sur TikTok - moderne, cash mais bienveillant.
 
+IMPORTANT - GRAMMAIRE FRANÇAISE (CRITIQUE) :
+- Fais TOUJOURS attention à la syntaxe et à l'ordre des mots
+- "on ne joue pas" ou "on joue pas" (PAS "pas on joue")
+- "on ne fait pas" ou "on fait pas" (PAS "pas on fait")
+- "ici on scale" (PAS "ici scale on")
+- "elles sont" (PAS "el sont" ou "elle sont")
+- "ils sont" (PAS "il sont")
+- "tu as" (PAS "t'as" en début de phrase, seulement dans le langage parlé)
+- Respecte l'ordre sujet-verbe-complément en français
+- Ne coupe JAMAIS les mots en deux (pas "el" pour "elles", pas "il" pour "ils" quand c'est pluriel)
+- Sois cash mais grammatically correct
+- Relis mentalement chaque phrase avant de la générer pour vérifier la syntaxe
+- Si tu hésites entre deux formulations, choisis la plus correcte grammaticalement
+
 COMMENT TU COMMENCES :
 - "Bah écoute boss..."
 - "Alors déjà..."
@@ -108,19 +122,32 @@ export async function POST(req: NextRequest) {
 
       const randomResponse = demoResponses[Math.floor(Math.random() * demoResponses.length)]
 
-      await supabase.from('conversations').insert({
+      const finalThreadId = thread_id || null
+
+      const { data: savedConversation } = await supabase.from('conversations').insert({
         user_id: user.id,
         agent_type: 'chat',
         title: message.substring(0, 50),
-        input_data: { message, thread_id: thread_id || null },
-        output_data: { response: randomResponse, thread_id: thread_id || null },
+        input_data: { message, thread_id: finalThreadId },
+        output_data: { response: randomResponse, thread_id: finalThreadId },
         tokens_used: 0,
-      })
+      }).select().single()
+
+      // Si c'est une nouvelle conversation, utiliser son ID comme thread_id
+      let conversationThreadId = finalThreadId
+      if (!finalThreadId && savedConversation) {
+        conversationThreadId = savedConversation.id
+        await supabase.from('conversations').update({
+          input_data: { message, thread_id: savedConversation.id },
+          output_data: { response: randomResponse, thread_id: savedConversation.id },
+        }).eq('id', savedConversation.id)
+      }
 
       return NextResponse.json({ 
         success: true, 
         response: randomResponse,
-        demo: true 
+        demo: true,
+        conversation_id: conversationThreadId || savedConversation?.id
       })
     }
 
@@ -148,19 +175,35 @@ export async function POST(req: NextRequest) {
 
       const response = completion.choices[0].message.content || "Désolé champion, j'ai bugué. Réessaye !"
 
+      // Déterminer le thread_id : si pas fourni, on va créer un nouveau thread
+      // Le thread_id sera l'ID de la première conversation du thread
+      const finalThreadId = thread_id || null
+
       // Sauvegarder la conversation avec le thread_id pour lier les conversations
-      await supabase.from('conversations').insert({
+      const { data: savedConversation, error: insertError } = await supabase.from('conversations').insert({
         user_id: user.id,
         agent_type: 'chat',
         title: message.substring(0, 50),
-        input_data: { message, thread_id: thread_id || null },
-        output_data: { response, thread_id: thread_id || null },
+        input_data: { message, thread_id: finalThreadId },
+        output_data: { response, thread_id: finalThreadId },
         tokens_used: completion.usage?.total_tokens || 0,
-      })
+      }).select().single()
+
+      // Si c'est une nouvelle conversation (pas de thread_id), utiliser son ID comme thread_id
+      let conversationThreadId = finalThreadId
+      if (!finalThreadId && savedConversation) {
+        conversationThreadId = savedConversation.id
+        // Mettre à jour la conversation avec son propre ID comme thread_id
+        await supabase.from('conversations').update({
+          input_data: { message, thread_id: savedConversation.id },
+          output_data: { response, thread_id: savedConversation.id },
+        }).eq('id', savedConversation.id)
+      }
 
       return NextResponse.json({ 
         success: true, 
-        response 
+        response,
+        conversation_id: conversationThreadId || savedConversation?.id
       })
 
     } catch (groqError: any) {

@@ -72,40 +72,51 @@ export default function HistoryPage() {
 
       // Grouper par thread_id et ne garder que la première conversation de chaque thread
       const groupedChatConversations: Conversation[] = []
-      const seenThreads = new Map<string, Conversation>()
       
       // Créer un map pour trouver rapidement les conversations par ID
       const conversationsById = new Map<string, Conversation>()
       chatConversations.forEach(conv => conversationsById.set(conv.id, conv))
 
-      chatConversations.forEach((conv) => {
-        // Récupérer le thread_id depuis les données
+      // Map pour stocker toutes les conversations par thread_id normalisé
+      const threadIdToConversations = new Map<string, Conversation[]>()
+      
+      // Fonction pour normaliser le thread_id
+      const normalizeThreadId = (conv: Conversation): string => {
         let threadId = conv.input_data?.thread_id || conv.output_data?.thread_id
         
         // Si pas de thread_id explicite, cette conversation est la première du thread
-        // Son ID sera utilisé comme thread_id par les conversations suivantes
         if (!threadId) {
-          threadId = conv.id
-        } else {
-          // Si la conversation a un thread_id, vérifier si ce thread_id correspond à l'ID d'une autre conversation
-          // Si oui, cette autre conversation est la première du thread
-          if (conversationsById.has(threadId)) {
-            // Le thread_id pointe vers une autre conversation, utiliser cette conversation comme première
-            const firstConv = conversationsById.get(threadId)!
-            if (!seenThreads.has(threadId)) {
-              seenThreads.set(threadId, firstConv)
-              groupedChatConversations.push(firstConv)
-            }
-            // Ne pas ajouter cette conversation car on a déjà la première
-            return
-          }
+          return conv.id
         }
         
-        // Si on n'a pas encore vu ce thread_id, c'est la première conversation du thread
-        if (!seenThreads.has(threadId)) {
-          seenThreads.set(threadId, conv)
-          groupedChatConversations.push(conv)
+        // Si le thread_id correspond à l'ID d'une conversation existante,
+        // utiliser cet ID comme thread_id normalisé
+        if (conversationsById.has(threadId)) {
+          return threadId
         }
+        
+        // Sinon, utiliser le thread_id tel quel
+        return threadId
+      }
+      
+      // Étape 1 : Grouper toutes les conversations par leur thread_id normalisé
+      chatConversations.forEach((conv) => {
+        const normalizedThreadId = normalizeThreadId(conv)
+        
+        if (!threadIdToConversations.has(normalizedThreadId)) {
+          threadIdToConversations.set(normalizedThreadId, [])
+        }
+        threadIdToConversations.get(normalizedThreadId)!.push(conv)
+      })
+
+      // Étape 2 : Pour chaque thread, trouver la conversation la plus ancienne
+      threadIdToConversations.forEach((convs, normalizedThreadId) => {
+        // Trier par date croissante pour trouver la plus ancienne
+        const sortedConvs = [...convs].sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+        const firstConv = sortedConvs[0]
+        groupedChatConversations.push(firstConv)
       })
 
       // Retrier les conversations de chat par date décroissante pour l'affichage
