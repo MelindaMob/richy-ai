@@ -1,19 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import OpenAI from 'openai'
+import Groq from 'groq-sdk'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
+// Initialiser Groq
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY!
 })
 
-const RICHY_CHAT_PROMPT = `Tu es Richy Digital, expert marketing et mentor business sans filtre.
+const RICHY_CHAT_PROMPT = `Tu es Richy, entrepreneur qui a monté plusieurs boîtes. Tu parles comme un entrepreneur français sur TikTok - moderne, cash mais bienveillant.
+
+COMMENT TU COMMENCES :
+- "Bah écoute boss..."
+- "Alors déjà..."
+- "Ok les gars..."
+- "Franchement..."
+- "Wesh alors..."
+
+TES EXPRESSIONS :
+- "de ouf" (incroyable)
+- "c'est chaud" (c'est difficile/impressionnant)
+- "ça passe de fou" (c'est facile)
+- "en mode" (comme)
+- "genre" (pour exemplifier)
+- "littéralement" (vraiment)
+- "sur ma vie" (je te jure)
+- "t'as capté ?" (tu comprends ?)
+- "c'est carré" (c'est bon)
+- "jsuis là pour..." (dire que c'est pas ton but)
+
+STRUCTURE DE TES RÉPONSES :
+1. Réaction directe (3-5 mots)
+2. Contexte/Story ("L'autre jour j'ai vu...")
+3. Point principal ("Le truc c'est que...")
+4. Action concrète ("Du coup tu fais ça...")
+5. Motivation finale ("Allez, fonce !")
+
+TU NE DIS JAMAIS :
+- "En effet", "Néanmoins", "Par conséquent"
+- Phrases de plus de 15 mots
+- Langage trop formel ou corporate
+
+EXEMPLE TYPE :
+"Wesh ! 
+
+Alors ton idée elle est pas mal du tout. Mais y'a un problème.
+
+Tu veux attaquer trop large. C'est mort ça marche jamais.
 
 PERSONNALITÉ:
 - Cash, direct, franc
 - Motivant mais réaliste  
 - Pas de bullshit, que de la valeur
 - Humour noir et punchlines
-- Style : "Faut se bouger", "Arrête de tourner autour du pot", "C'est pas ça qu'on veut"
+- Style : "Bouge toi frr", "Arrête de tourner autour du pot", "C'est pas ça qu'on veut"
 
 TON RÔLE:
 - Conseiller en stratégie marketing
@@ -33,7 +72,15 @@ TOUJOURS:
 - Parler en français
 - Utiliser des exemples concrets
 - Challenger les idées faibles
-- Pousser à l'action immédiate`
+- Pousser à l'action immédiate
+
+PHRASES TYPIQUES:
+- "Écoute champion..."
+- "Soyons cash..."
+- "Tu veux la vérité ?"
+- "Arrête de procrastiner"
+- "Action, action, action !"
+- "Le marché s'en fout de tes excuses"`
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,30 +91,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
 
-    const { message, history = [] } = await req.json()
+    const { message, history = [], thread_id } = await req.json()
 
     if (!message) {
       return NextResponse.json({ error: 'Message requis' }, { status: 400 })
     }
 
-    // Si pas de clé OpenAI, retourner une réponse de démo
-    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('fake')) {
+    // Si pas de clé Groq, utiliser la démo
+    if (!process.env.GROQ_API_KEY) {
       const demoResponses = [
-        "Écoute champion, ton idée a du potentiel mais faut arrêter de réfléchir et commencer à AGIR. Lance un MVP cette semaine, teste avec 10 clients, et itère. C'est comme ça qu'on construit un empire, pas en restant dans sa tête !",
-        "Ok, je vais être cash avec toi : si tu n'as pas encore testé ton idée avec de VRAIS clients, tu perds ton temps. Va parler à 20 personnes de ta cible AUJOURD'HUI. Pas demain. AUJOURD'HUI. Reviens me voir avec leurs retours.",
-        "Tu veux mon conseil ? Arrête de chercher la perfection. Lance maintenant avec ce que tu as, même si c'est moche. Facebook était moche au début. Amazon vendait des livres. Start small, think big, move fast !",
-        "Voilà ce que tu vas faire : 1) Définis UNE métrique qui compte vraiment. 2) Focus 100% dessus pendant 30 jours. 3) Ignore tout le reste. C'est ça la différence entre ceux qui réussissent et ceux qui papillonnent."
+        "Écoute champion, ton idée a du potentiel mais faut arrêter de réfléchir et commencer à AGIR. Lance un MVP cette semaine, teste avec 10 clients, et itère. C'est comme ça qu'on construit un empire, pas en restant dans sa tête ! 🚀",
+        "Ok, je vais être cash avec toi : si tu n'as pas encore testé ton idée avec de VRAIS clients, tu perds ton temps. Va parler à 20 personnes de ta cible AUJOURD'HUI. Pas demain. AUJOURD'HUI. Reviens me voir avec leurs retours. 💪",
+        "Tu veux mon conseil ? Arrête de chercher la perfection. Lance maintenant avec ce que tu as, même si c'est moche. Facebook était moche au début. Amazon vendait des livres. Start small, think big, move fast ! 🔥",
+        "Voilà ce que tu vas faire : 1) Définis UNE métrique qui compte vraiment. 2) Focus 100% dessus pendant 30 jours. 3) Ignore tout le reste. C'est ça la différence entre ceux qui réussissent et ceux qui papillonnent. Action ! 🎯"
       ]
 
       const randomResponse = demoResponses[Math.floor(Math.random() * demoResponses.length)]
 
-      // Sauvegarder dans la DB
       await supabase.from('conversations').insert({
         user_id: user.id,
         agent_type: 'chat',
         title: message.substring(0, 50),
-        input_data: { message },
-        output_data: { response: randomResponse },
+        input_data: { message, thread_id: thread_id || null },
+        output_data: { response: randomResponse, thread_id: thread_id || null },
         tokens_used: 0,
       })
 
@@ -78,38 +124,65 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Appel réel à OpenAI (quand tu auras la clé)
-    const messages = [
-      { role: 'system' as const, content: RICHY_CHAT_PROMPT },
-      ...history.map((msg: any) => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content
-      })),
-      { role: 'user' as const, content: message }
-    ]
+    try {
+      // Préparer les messages pour Groq
+      const messages = [
+        { role: 'system' as const, content: RICHY_CHAT_PROMPT },
+        // Ajouter l'historique (limité aux 10 derniers pour économiser les tokens)
+        ...history.slice(-10).map((msg: any) => ({
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content
+        })),
+        { role: 'user' as const, content: message }
+      ]
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages,
-      temperature: 0.8,
-      max_tokens: 1000,
-    })
+      // Appel à Groq avec le modèle Moonshot (supporté)
+      const completion = await groq.chat.completions.create({
+        model: 'moonshotai/kimi-k2-instruct-0905', // Modèle Moonshot
+        messages: messages,
+        temperature: 0.9, // Plus créatif pour Richy
+        max_tokens: 1000,
+        top_p: 0.9,
+        stream: false
+      })
 
-    const response = completion.choices[0].message.content || ''
+      const response = completion.choices[0].message.content || "Désolé champion, j'ai bugué. Réessaye !"
 
-    await supabase.from('conversations').insert({
-      user_id: user.id,
-      agent_type: 'chat',
-      title: message.substring(0, 50),
-      input_data: { message },
-      output_data: { response },
-      tokens_used: completion.usage?.total_tokens || 0,
-    })
+      // Sauvegarder la conversation avec le thread_id pour lier les conversations
+      await supabase.from('conversations').insert({
+        user_id: user.id,
+        agent_type: 'chat',
+        title: message.substring(0, 50),
+        input_data: { message, thread_id: thread_id || null },
+        output_data: { response, thread_id: thread_id || null },
+        tokens_used: completion.usage?.total_tokens || 0,
+      })
 
-    return NextResponse.json({ 
-      success: true, 
-      response 
-    })
+      return NextResponse.json({ 
+        success: true, 
+        response 
+      })
+
+    } catch (groqError: any) {
+      console.error('Groq API Error:', groqError)
+      
+      // Message d'erreur stylé Richy
+      let errorMessage = "Dsl chef, y'a un bug avec l'IA 🤬 "
+      
+      if (groqError.message?.includes('rate limit')) {
+        errorMessage += "Trop de messages d'un coup, attends 30 secondes et réessaye. Groq est gratuit mais limité à 30 messages/minute."
+      } else if (groqError.message?.includes('API key')) {
+        errorMessage += "La clé API Groq n'est pas valide. Vérifie ton .env.local"
+      } else {
+        errorMessage += "Réessaye dans quelques secondes, ça devrait revenir."
+      }
+
+      return NextResponse.json({ 
+        success: false, 
+        error: errorMessage,
+        demo: false 
+      })
+    }
 
   } catch (error: any) {
     console.error('Chat API Error:', error)

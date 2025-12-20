@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -12,17 +12,13 @@ interface Message {
 }
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: "Salut champion ! 🔥 C'est Richy. Qu'est-ce que tu veux construire aujourd'hui ? Balance-moi ton idée et on va la transformer en machine à cash !",
-      timestamp: new Date()
-    }
-  ])
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
 
   const scrollToBottom = () => {
@@ -32,6 +28,106 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Charger l'historique de la conversation si un ID est fourni
+  useEffect(() => {
+    const conversationId = searchParams.get('conversation')
+    if (conversationId) {
+      loadConversationHistory(conversationId)
+    } else {
+      // Afficher le message de bienvenue si pas de conversation
+      setMessages([{
+        role: 'assistant',
+        content: "Wee ca dit quoi ? C'est Richy. Qu'est-ce que tu veux construire aujourd'hui ? Envoie ton idée pout voir ce qu'on peut en faire.",
+        timestamp: new Date()
+      }])
+      setLoadingHistory(false)
+    }
+  }, [searchParams])
+
+  const loadConversationHistory = async (conversationId: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      // Récupérer la conversation spécifique
+      const { data: conversation, error } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', conversationId)
+        .eq('user_id', user.id)
+        .eq('agent_type', 'chat')
+        .single()
+
+      if (error || !conversation) {
+        console.error('Error loading conversation:', error)
+        setLoadingHistory(false)
+        return
+      }
+
+      // Récupérer le thread_id (l'ID de la première conversation du thread)
+      const threadId = conversation.input_data?.thread_id || conversation.output_data?.thread_id || conversationId
+
+      // Récupérer toutes les conversations du même thread
+      // On va chercher toutes les conversations de chat et filtrer celles qui ont le même thread_id
+      const { data: allChatConversations } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('agent_type', 'chat')
+        .order('created_at', { ascending: true })
+
+      // Filtrer pour ne garder que celles du même thread
+      const threadConversations = (allChatConversations || []).filter(conv => {
+        const convThreadId = conv.input_data?.thread_id || conv.output_data?.thread_id || conv.id
+        return convThreadId === threadId
+      })
+
+      // Si aucune conversation avec thread_id trouvée, utiliser uniquement celle sélectionnée
+      const conversationsToLoad = threadConversations.length > 0 ? threadConversations : [conversation]
+
+      // Reconstruire l'historique des messages dans l'ordre chronologique
+      const historyMessages: Message[] = []
+      
+      conversationsToLoad.forEach((conv) => {
+        if (conv.input_data?.message) {
+          historyMessages.push({
+            role: 'user',
+            content: conv.input_data.message,
+            timestamp: new Date(conv.created_at)
+          })
+        }
+        if (conv.output_data?.response) {
+          historyMessages.push({
+            role: 'assistant',
+            content: conv.output_data.response,
+            timestamp: new Date(conv.created_at)
+          })
+        }
+      })
+
+      if (historyMessages.length > 0) {
+        setMessages(historyMessages)
+      } else {
+        // Si pas d'historique, afficher le message de bienvenue
+        setMessages([{
+          role: 'assistant',
+          content: "Wee ca dit quoi ? C'est Richy. Qu'est-ce que tu veux construire aujourd'hui ? Envoie ton idée pout voir ce qu'on peut en faire.",
+          timestamp: new Date()
+        }])
+      }
+    } catch (error) {
+      console.error('Error loading conversation history:', error)
+      // En cas d'erreur, afficher le message de bienvenue
+      setMessages([{
+        role: 'assistant',
+        content: "Wee ca dit quoi ? C'est Richy. Qu'est-ce que tu veux construire aujourd'hui ? Envoie ton idée pout voir ce qu'on peut en faire.",
+        timestamp: new Date()
+      }])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,6 +153,10 @@ export default function ChatPage() {
         return
       }
 
+      // Récupérer le thread_id depuis l'URL si on continue une conversation
+      const conversationId = searchParams.get('conversation')
+      const threadId = conversationId || undefined
+
       // Appeler l'API
       const response = await fetch('/api/agents/chat', {
         method: 'POST',
@@ -65,7 +165,8 @@ export default function ChatPage() {
         },
         body: JSON.stringify({ 
           message: userMessage,
-          history: messages.slice(-10) // Envoyer les 10 derniers messages pour le contexte
+          history: messages.slice(-10), // Envoyer les 10 derniers messages pour le contexte
+          thread_id: threadId // Passer le thread_id pour lier les conversations
         }),
       })
 
@@ -132,8 +233,20 @@ export default function ChatPage() {
       <main className="flex-1 container mx-auto px-4 py-6 max-w-4xl">
         {/* Messages */}
         <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-6 h-[600px] overflow-y-auto mb-4">
-          <div className="space-y-4">
-            {messages.map((message, index) => (
+          {loadingHistory ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="animate-pulse flex space-x-1 justify-center mb-4">
+                  <div className="w-2 h-2 bg-richy-gold rounded-full"></div>
+                  <div className="w-2 h-2 bg-richy-gold rounded-full animation-delay-200"></div>
+                  <div className="w-2 h-2 bg-richy-gold rounded-full animation-delay-400"></div>
+                </div>
+                <p className="text-gray-400 text-sm">Chargement de la conversation...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map((message, index) => (
               <div
                 key={index}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
@@ -175,7 +288,8 @@ export default function ChatPage() {
               </div>
             )}
             <div ref={messagesEndRef} />
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Input Form */}

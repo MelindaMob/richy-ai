@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import Link from 'next/link'
 
 export default function Home() {
   return (
@@ -10,9 +11,22 @@ export default function Home() {
         <p className="text-2xl mb-8">
           Ton assistant IA pour valider et construire ton SaaS
         </p>
-        <Button>
-          Commencer Gratuitement
-        </Button>
+        <div className="flex flex-col items-center gap-4">
+          <Link href="/register">
+            <Button>
+              Commencer Gratuitement
+            </Button>
+          </Link>
+          <p className="text-gray-400">
+            Déjà membre ?{' '}
+            <Link 
+              href="/login" 
+              className="text-richy-gold hover:text-richy-gold-light transition-colors font-medium"
+            >
+              Se connecter
+            </Link>
+          </p>
+        </div>
       </div>
     </main>
   )

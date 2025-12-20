@@ -1,168 +1,260 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import OpenAI from 'openai'
+import * as cheerio from 'cheerio'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!,
-})
+// Configuration Perplexity
+const PERPLEXITY_API_URL = 'https://api.perplexity.ai'
 
-// Prompt système pour l'agent Validator
-const VALIDATOR_PROMPT = `Tu es l'agent Validator de Richy.ai. Ton rôle : analyser sans pitié les projets SaaS.
+// Fonction simplifiée pour scraper un site web
+async function scrapeSiteContent(url: string) {
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    })
+    
+    if (!response.ok) {
+      return null
+    }
 
-ANALYSE OBLIGATOIRE:
-1. Score global /100
-2. Potentiel économique (Faible/Moyen/Élevé/Exceptionnel)
-3. Analyse marché et concurrence
-4. Cible précise et taille du marché
-5. Forces (3 minimum)
-6. Faiblesses (3 minimum)
-7. Points critiques à corriger
-8. Fonctionnalités manquantes
-9. Niveau complexité technique
-10. Verdict final : "Gagnant 🏆" / "À retravailler ⚠️" / "Non rentable ❌"
+    const html = await response.text()
+    const $ = cheerio.load(html)
 
-CRITÈRES DE SCORING:
-- Problème résolu (20 pts)
-- Taille du marché (20 pts)
-- Différenciation (15 pts)
-- Monétisation claire (15 pts)
-- Faisabilité technique (10 pts)
-- UX/UI (10 pts)
-- Go-to-market (10 pts)
-
-STYLE:
-- Brutal mais constructif
-- Pas de complaisance
-- Solutions concrètes
-- Français direct
-
-Retourne UNIQUEMENT un JSON structuré avec tous les champs demandés.`
+    // Extraire juste les infos essentielles
+    return {
+      title: $('title').text() || '',
+      description: $('meta[name="description"]').attr('content') || '',
+      heroText: $('h1').first().text() || '',
+      hasSSL: url.startsWith('https'),
+      // Limiter le contenu pour éviter les messages trop longs
+      snippet: $('main, article, .content')
+        .text()
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 500) // Seulement 500 caractères
+    }
+  } catch (error) {
+    console.error('Erreur de scraping:', error)
+    return null
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     
-    // Vérifier l'authentification
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
-      return NextResponse.json(
-        { error: 'Non autorisé' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
 
-    // Récupérer les données
     const { url, description } = await req.json()
 
     if (!url) {
-      return NextResponse.json(
-        { error: 'URL requise' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'URL requise' }, { status: 400 })
     }
 
-    // Pour le moment, on simule l'analyse (tu pourras ajouter le web scraping plus tard)
-    // En production, tu utiliseras puppeteer ou playwright pour scraper le site
-    
-    const userInput = `
-    URL du SaaS : ${url}
-    Description : ${description || 'Non fournie'}
-    
-    Analyse ce SaaS et donne-moi ton verdict complet.
-    `
-
-    // Appel à OpenAI
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
-      messages: [
-        { role: 'system', content: VALIDATOR_PROMPT },
-        { role: 'user', content: userInput }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.7,
-      max_tokens: 2000,
-    })
-
-    const result = JSON.parse(completion.choices[0].message.content || '{}')
-
-    // Formater le résultat pour s'assurer qu'on a tous les champs
-    const formattedResult = {
-      score: result.score || 50,
-      verdict: result.verdict || 'À retravailler ⚠️',
-      potential: result.potential || 'Moyen',
-      market_analysis: result.market_analysis || 'Analyse non disponible',
-      target_audience: result.target_audience || 'Non définie',
-      strengths: result.strengths || ['Point fort 1', 'Point fort 2', 'Point fort 3'],
-      weaknesses: result.weaknesses || ['Point faible 1', 'Point faible 2', 'Point faible 3'],
-      critical_points: result.critical_points || ['Point critique 1', 'Point critique 2'],
-      missing_features: result.missing_features || ['Feature 1', 'Feature 2'],
-      technical_complexity: result.technical_complexity || 'Modéré',
-      recommendations: result.recommendations || ['Recommandation 1', 'Recommandation 2', 'Recommandation 3']
+    // Vérifier si on a une clé Perplexity
+    if (!process.env.PERPLEXITY_API_KEY) {
+      return generateDemoResponse(user.id, url, description, supabase)
     }
 
-    // Sauvegarder dans la base de données
-    await supabase.from('conversations').insert({
-      user_id: user.id,
-      agent_type: 'validator',
-      title: `Validation de ${url}`,
-      input_data: { url, description },
-      output_data: formattedResult,
-      tokens_used: completion.usage?.total_tokens || 0,
-    })
+    try {
+      // Scraper le site
+      console.log('🕷️ Scraping du site...')
+      const scrapedData = await scrapeSiteContent(url)
+      
+      // Construire un prompt COURT et PRÉCIS
+      let userPrompt = `Analyse ce SaaS et donne ton verdict:
+URL: ${url}
+Description: ${description || 'SaaS à analyser'}`
 
-    return NextResponse.json({ 
-      success: true, 
-      result: formattedResult 
-    })
-
-  } catch (error: any) {
-    console.error('Validator API Error:', error)
-    
-    // Si pas de clé OpenAI, retourner une analyse de démo
-    if (error.message?.includes('API key')) {
-      const demoResult = {
-        score: 72,
-        verdict: 'À retravailler ⚠️',
-        potential: 'Élevé',
-        market_analysis: 'Le marché des SaaS est en pleine croissance. Ton concept a du potentiel mais nécessite des ajustements pour vraiment percer. La concurrence est présente mais tu peux te différencier.',
-        target_audience: 'Entrepreneurs et startups tech cherchant à automatiser leurs processus',
-        strengths: [
-          'Concept innovant qui répond à un vrai besoin',
-          'Interface utilisateur claire et moderne',
-          'Bon potentiel de scalabilité'
-        ],
-        weaknesses: [
-          'Proposition de valeur pas assez différenciée',
-          'Manque de social proof et de cas clients',
-          'Pricing strategy à retravailler'
-        ],
-        critical_points: [
-          'Ajouter une démo interactive sur la landing page',
-          'Clarifier l\'USP (Unique Selling Proposition) dès le hero'
-        ],
-        missing_features: [
-          'Intégrations avec les outils populaires (Slack, Notion, etc.)',
-          'API publique pour les développeurs',
-          'Dashboard analytics plus poussé'
-        ],
-        technical_complexity: 'Modéré',
-        recommendations: [
-          'Focus sur une niche spécifique avant de scaler',
-          'Implémenter un freemium ou trial de 14 jours minimum',
-          'Créer du contenu pour établir ton autorité dans le domaine'
-        ]
+      if (scrapedData) {
+        userPrompt += `
+Titre du site: ${scrapedData.title}
+Description meta: ${scrapedData.description}
+SSL: ${scrapedData.hasSSL ? 'Oui' : 'Non'}`
       }
+
+      userPrompt += `
+
+Fournis une analyse JSON avec:
+- score (sur 100)
+- verdict ("Gagnant 🏆" ou "À retravailler ⚠️" ou "Non rentable ❌")
+- potential ("Faible", "Moyen", "Élevé", "Exceptionnel")
+- market_analysis (analyse du marché en 2-3 phrases)
+- target_audience (cible principale)
+- strengths (3 forces, array)
+- weaknesses (3 faiblesses, array)
+- critical_points (2-3 points critiques, array)
+- missing_features (features manquantes, array)
+- technical_complexity ("Simple", "Modéré", "Complexe")
+- recommendations (3 recommandations, array)`
+
+      // Appel à Perplexity avec un prompt plus court
+      console.log('📊 Analyse avec Perplexity...')
+      const analysisResponse = await fetch(`${PERPLEXITY_API_URL}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'sonar-reasoning', // <- comme dans la doc
+          messages: [
+            {
+              role: 'system',
+              content: 'Tu es un expert en analyse de SaaS. Analyse et donne ton verdict de manière concise. Retourne UNIQUEMENT un JSON valide.'
+            },
+            {
+              role: 'user',
+              content: userPrompt
+            }
+          ],
+          temperature: 0.7,
+          // Ancienne valeur : max_tokens: 1500,
+        max_tokens: 3000,
+          return_citations: true
+        })
+      })
+
+      if (!analysisResponse.ok) {
+        const errorText = await analysisResponse.text()
+        console.error('Erreur Perplexity:', analysisResponse.status, errorText)
+        throw new Error(`Perplexity API error: ${analysisResponse.status}`)
+      }
+
+      const analysisData = await analysisResponse.json()
+      const analysisContent = analysisData.choices[0].message.content
+
+      // ⭐ CORRECTION DU BLOC DE PARSING ICI
+      let result
+      try {
+        // Tente de trouver le début et la fin du bloc JSON le plus à l'extérieur
+        const startIndex = analysisContent.indexOf('{');
+        const endIndex = analysisContent.lastIndexOf('}');
+
+        if (startIndex === -1 || endIndex === -1 || startIndex > endIndex) {
+            throw new Error('Aucun bloc JSON valide trouvé.');
+        }
+        
+        const cleanContent = analysisContent.substring(startIndex, endIndex + 1);
+        result = JSON.parse(cleanContent)
+        
+      } catch (parseError) {
+        console.error('❌ Erreur de parsing du JSON de l\'IA. Utilisation des valeurs par défaut.', parseError)
+        console.error('Contenu brut de l\'IA (pour inspection):', analysisContent)
+        
+        // Utiliser des valeurs par défaut
+        result = {
+          score: 65,
+          verdict: 'À retravailler ⚠️',
+          potential: 'Moyen',
+          market_analysis: 'Analyse non disponible (Erreur de format IA). Veuillez ré-essayer.',
+          target_audience: 'À définir',
+          strengths: ['Concept intéressant'],
+          weaknesses: ['À améliorer'],
+          critical_points: ['Plus de détails nécessaires'],
+          missing_features: ['À identifier'],
+          technical_complexity: 'Modéré',
+          recommendations: ['Approfondir l\'analyse']
+        }
+      }
+
+      // Formater le résultat final
+      const formattedResult = {
+        score: result.score || 50,
+        verdict: result.verdict || 'À retravailler ⚠️',
+        potential: result.potential || 'Moyen',
+        market_analysis: result.market_analysis || 'Le marché des SaaS est en croissance constante.',
+        target_audience: result.target_audience || 'Entreprises et startups',
+        strengths: Array.isArray(result.strengths) ? result.strengths : ['À analyser'],
+        weaknesses: Array.isArray(result.weaknesses) ? result.weaknesses : ['À analyser'],
+        critical_points: Array.isArray(result.critical_points) ? result.critical_points : ['À analyser'],
+        missing_features: Array.isArray(result.missing_features) ? result.missing_features : ['À analyser'],
+        technical_complexity: result.technical_complexity || 'Modéré',
+        recommendations: Array.isArray(result.recommendations) ? result.recommendations : ['À définir'],
+        sources: analysisData.citations || []
+      }
+
+      // Sauvegarder
+      await supabase.from('conversations').insert({
+        user_id: user.id,
+        agent_type: 'validator',
+        title: `Validation de ${url}`,
+        input_data: { url, description },
+        output_data: formattedResult,
+        tokens_used: analysisData.usage?.total_tokens || 0,
+      })
 
       return NextResponse.json({ 
         success: true, 
-        result: demoResult,
-        demo: true 
+        result: formattedResult 
       })
+
+    } catch (error: any) {
+      console.error('Erreur complète:', error)
+      return generateDemoResponse(user.id, url, description, supabase)
     }
 
+  } catch (error: any) {
+    console.error('Validator API Error:', error)
     return NextResponse.json(
       { error: 'Erreur lors de l\'analyse' },
       { status: 500 }
     )
   }
+}
+
+// Fonction de démo simplifiée
+async function generateDemoResponse(userId: string, url: string, description: string, supabase: any) {
+  const demoResult = {
+    score: 72,
+    verdict: 'À retravailler ⚠️',
+    potential: 'Élevé',
+    market_analysis: 'Le marché des SaaS B2B est en forte croissance avec une valorisation globale de 195 milliards de dollars. La niche ciblée montre un potentiel intéressant mais nécessite une différenciation claire.',
+    target_audience: 'Startups et PME en phase de croissance (10-100 employés)',
+    strengths: [
+      'Concept innovant qui répond à un besoin réel',
+      'Interface utilisateur moderne et intuitive',
+      'Potentiel de scalabilité important'
+    ],
+    weaknesses: [
+      'Proposition de valeur pas assez différenciée',
+      'Manque de social proof et cas clients',
+      'Stratégie de pricing à clarifier'
+    ],
+    critical_points: [
+      'Ajouter une démo interactive sur la landing page',
+      'Clarifier l\'USP dès le hero section'
+    ],
+    missing_features: [
+      'Intégrations avec outils populaires (Slack, Notion)',
+      'API publique pour développeurs',
+      'Dashboard analytics'
+    ],
+    technical_complexity: 'Modéré',
+    recommendations: [
+      'Focus sur une niche ultra-spécifique avant d\'élargir',
+      'Implémenter un freemium ou trial de 14 jours',
+      'Créer du contenu SEO pour établir l\'autorité'
+    ],
+    sources: ['Mode démo - Configurez PERPLEXITY_API_KEY pour une analyse réelle']
+  }
+
+  await supabase.from('conversations').insert({
+    user_id: userId,
+    agent_type: 'validator',
+    title: `Validation de ${url}`,
+    input_data: { url, description },
+    output_data: demoResult,
+    tokens_used: 0,
+  })
+
+  return NextResponse.json({ 
+    success: true, 
+    result: demoResult,
+    demo: true 
+  })
 }

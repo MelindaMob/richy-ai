@@ -51,8 +51,78 @@ export default function HistoryPage() {
 
       if (error) throw error
 
-      setConversations(data || [])
-      setFilteredConversations(data || [])
+      // Grouper les conversations par thread_id pour le chat
+      // Pour les autres agents, chaque conversation est indépendante
+      const chatConversations: Conversation[] = []
+      const otherConversations: Conversation[] = []
+
+      // Séparer les conversations de chat des autres
+      ;(data || []).forEach((conv) => {
+        if (conv.agent_type === 'chat') {
+          chatConversations.push(conv)
+        } else {
+          otherConversations.push(conv)
+        }
+      })
+
+      // Pour le chat, trier par date croissante pour identifier la première de chaque thread
+      chatConversations.sort((a, b) => 
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      )
+
+      // Grouper par thread_id et ne garder que la première conversation de chaque thread
+      const groupedChatConversations: Conversation[] = []
+      const seenThreads = new Map<string, Conversation>()
+      
+      // Créer un map pour trouver rapidement les conversations par ID
+      const conversationsById = new Map<string, Conversation>()
+      chatConversations.forEach(conv => conversationsById.set(conv.id, conv))
+
+      chatConversations.forEach((conv) => {
+        // Récupérer le thread_id depuis les données
+        let threadId = conv.input_data?.thread_id || conv.output_data?.thread_id
+        
+        // Si pas de thread_id explicite, cette conversation est la première du thread
+        // Son ID sera utilisé comme thread_id par les conversations suivantes
+        if (!threadId) {
+          threadId = conv.id
+        } else {
+          // Si la conversation a un thread_id, vérifier si ce thread_id correspond à l'ID d'une autre conversation
+          // Si oui, cette autre conversation est la première du thread
+          if (conversationsById.has(threadId)) {
+            // Le thread_id pointe vers une autre conversation, utiliser cette conversation comme première
+            const firstConv = conversationsById.get(threadId)!
+            if (!seenThreads.has(threadId)) {
+              seenThreads.set(threadId, firstConv)
+              groupedChatConversations.push(firstConv)
+            }
+            // Ne pas ajouter cette conversation car on a déjà la première
+            return
+          }
+        }
+        
+        // Si on n'a pas encore vu ce thread_id, c'est la première conversation du thread
+        if (!seenThreads.has(threadId)) {
+          seenThreads.set(threadId, conv)
+          groupedChatConversations.push(conv)
+        }
+      })
+
+      // Retrier les conversations de chat par date décroissante pour l'affichage
+      groupedChatConversations.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+
+      // Combiner les conversations de chat groupées avec les autres
+      const groupedConversations = [...groupedChatConversations, ...otherConversations]
+      
+      // Retrier le tout par date décroissante
+      groupedConversations.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      )
+
+      setConversations(groupedConversations)
+      setFilteredConversations(groupedConversations)
     } catch (error) {
       console.error('Error loading history:', error)
     } finally {
@@ -188,7 +258,7 @@ export default function HistoryPage() {
         {/* Content */}
         <div className="grid md:grid-cols-2 gap-6">
           {/* Conversations List */}
-          <div className="space-y-4 max-h-[700px] overflow-y-auto">
+          <div className={`space-y-4 ${selectedConversation ? 'hidden md:block' : ''} max-h-[700px] overflow-y-auto`}>
             {loading ? (
               <div className="bg-richy-black-soft rounded-xl p-8 text-center">
                 <p className="text-gray-400">Chargement...</p>
@@ -230,8 +300,8 @@ export default function HistoryPage() {
             )}
           </div>
 
-          {/* Conversation Detail */}
-          <div className="bg-richy-black-soft border border-gray-800 rounded-xl p-6 h-[700px] overflow-y-auto">
+          {/* Conversation Detail - Desktop */}
+          <div className="hidden md:block bg-richy-black-soft border border-gray-800 rounded-xl p-6 h-[700px] overflow-y-auto">
             {selectedConversation ? (
               <div className="space-y-6">
                 <div className="border-b border-gray-800 pb-4">
@@ -250,9 +320,45 @@ export default function HistoryPage() {
                 <div>
                   <h3 className="text-richy-gold font-semibold mb-2">📥 Entrée :</h3>
                   <div className="bg-richy-black rounded-lg p-4">
-                    <pre className="text-gray-300 whitespace-pre-wrap text-sm">
-                      {JSON.stringify(selectedConversation.input_data, null, 2)}
-                    </pre>
+                    {selectedConversation.agent_type === 'chat' ? (
+                      <p className="text-gray-300 whitespace-pre-wrap text-sm">
+                        {selectedConversation.input_data?.message || JSON.stringify(selectedConversation.input_data, null, 2)}
+                      </p>
+                    ) : selectedConversation.agent_type === 'validator' ? (
+                      <div className="space-y-2 text-sm text-gray-300">
+                        {selectedConversation.input_data?.url && (
+                          <p><span className="text-richy-gold">URL :</span> {selectedConversation.input_data.url}</p>
+                        )}
+                        {selectedConversation.input_data?.description && (
+                          <p><span className="text-richy-gold">Description :</span> {selectedConversation.input_data.description}</p>
+                        )}
+                        {!selectedConversation.input_data?.url && !selectedConversation.input_data?.description && (
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(selectedConversation.input_data, null, 2)}</pre>
+                        )}
+                      </div>
+                    ) : selectedConversation.agent_type === 'prompt' ? (
+                      <div className="space-y-2 text-sm text-gray-300">
+                        {selectedConversation.input_data?.description && (
+                          <p><span className="text-richy-gold">Description :</span> {selectedConversation.input_data.description}</p>
+                        )}
+                        {!selectedConversation.input_data?.description && (
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(selectedConversation.input_data, null, 2)}</pre>
+                        )}
+                      </div>
+                    ) : selectedConversation.agent_type === 'builder' ? (
+                      <div className="space-y-2 text-sm text-gray-300">
+                        {selectedConversation.input_data?.description && (
+                          <p><span className="text-richy-gold">Description :</span> {selectedConversation.input_data.description}</p>
+                        )}
+                        {!selectedConversation.input_data?.description && (
+                          <pre className="whitespace-pre-wrap">{JSON.stringify(selectedConversation.input_data, null, 2)}</pre>
+                        )}
+                      </div>
+                    ) : (
+                      <pre className="text-gray-300 whitespace-pre-wrap text-sm">
+                        {JSON.stringify(selectedConversation.input_data, null, 2)}
+                      </pre>
+                    )}
                   </div>
                 </div>
 
@@ -260,21 +366,82 @@ export default function HistoryPage() {
                 <div>
                   <h3 className="text-richy-gold font-semibold mb-2">📤 Résultat :</h3>
                   <div className="bg-richy-black rounded-lg p-4">
-                    <pre className="text-gray-300 whitespace-pre-wrap text-sm">
-                      {JSON.stringify(selectedConversation.output_data, null, 2)}
-                    </pre>
+                    {selectedConversation.agent_type === 'chat' ? (
+                      <p className="text-gray-300 whitespace-pre-wrap text-sm">
+                        {selectedConversation.output_data?.response || JSON.stringify(selectedConversation.output_data, null, 2)}
+                      </p>
+                    ) : selectedConversation.agent_type === 'validator' ? (
+                      <div className="space-y-3 text-sm">
+                        {selectedConversation.output_data?.score !== undefined && (
+                          <div>
+                            <span className="text-richy-gold font-semibold">Score :</span>{' '}
+                            <span className="text-white text-lg font-bold">{selectedConversation.output_data.score}/100</span>
+                          </div>
+                        )}
+                        {selectedConversation.output_data?.analysis && (
+                          <div>
+                            <span className="text-richy-gold font-semibold">Analyse :</span>
+                            <p className="text-gray-300 whitespace-pre-wrap mt-1">{selectedConversation.output_data.analysis}</p>
+                          </div>
+                        )}
+                        {selectedConversation.output_data?.response && (
+                          <p className="text-gray-300 whitespace-pre-wrap">{selectedConversation.output_data.response}</p>
+                        )}
+                        {!selectedConversation.output_data?.score && !selectedConversation.output_data?.analysis && !selectedConversation.output_data?.response && (
+                          <pre className="text-gray-300 whitespace-pre-wrap">{JSON.stringify(selectedConversation.output_data, null, 2)}</pre>
+                        )}
+                      </div>
+                    ) : selectedConversation.agent_type === 'prompt' ? (
+                      <div className="space-y-2">
+                        {selectedConversation.output_data?.prompt && (
+                          <div>
+                            <span className="text-richy-gold font-semibold">Prompt généré :</span>
+                            <pre className="text-gray-300 whitespace-pre-wrap text-sm mt-2 bg-richy-black-soft p-3 rounded border border-gray-700">
+                              {selectedConversation.output_data.prompt}
+                            </pre>
+                          </div>
+                        )}
+                        {selectedConversation.output_data?.response && (
+                          <p className="text-gray-300 whitespace-pre-wrap text-sm">{selectedConversation.output_data.response}</p>
+                        )}
+                        {!selectedConversation.output_data?.prompt && !selectedConversation.output_data?.response && (
+                          <pre className="text-gray-300 whitespace-pre-wrap text-sm">{JSON.stringify(selectedConversation.output_data, null, 2)}</pre>
+                        )}
+                      </div>
+                    ) : selectedConversation.agent_type === 'builder' ? (
+                      <div className="space-y-2">
+                        {selectedConversation.output_data?.roadmap && (
+                          <div>
+                            <span className="text-richy-gold font-semibold">Roadmap :</span>
+                            <pre className="text-gray-300 whitespace-pre-wrap text-sm mt-2 bg-richy-black-soft p-3 rounded border border-gray-700">
+                              {selectedConversation.output_data.roadmap}
+                            </pre>
+                          </div>
+                        )}
+                        {selectedConversation.output_data?.response && (
+                          <p className="text-gray-300 whitespace-pre-wrap text-sm">{selectedConversation.output_data.response}</p>
+                        )}
+                        {!selectedConversation.output_data?.roadmap && !selectedConversation.output_data?.response && (
+                          <pre className="text-gray-300 whitespace-pre-wrap text-sm">{JSON.stringify(selectedConversation.output_data, null, 2)}</pre>
+                        )}
+                      </div>
+                    ) : (
+                      <pre className="text-gray-300 whitespace-pre-wrap text-sm">
+                        {JSON.stringify(selectedConversation.output_data, null, 2)}
+                      </pre>
+                    )}
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex gap-3">
-                  <Link
-                    href={`/${selectedConversation.agent_type}`}
-                    className="flex-1 bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-2 px-4 rounded-lg text-center hover:scale-105 transition-all duration-200 shadow-lg"
-                  >
-                    Relancer cet agent →
-                  </Link>
-                </div>
+                  {/* Actions */}
+                  <div className="flex gap-3">
+                    <Link
+                      href={`/${selectedConversation.agent_type}?conversation=${selectedConversation.id}`}
+                      className="flex-1 bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-2 px-4 rounded-lg text-center hover:scale-105 transition-all duration-200 shadow-lg"
+                    >
+                      Continuer cette conversation →
+                    </Link>
+                  </div>
               </div>
             ) : (
               <div className="flex items-center justify-center h-full">
@@ -284,6 +451,168 @@ export default function HistoryPage() {
               </div>
             )}
           </div>
+
+          {/* Mobile Modal */}
+          {selectedConversation && (
+            <div className="md:hidden fixed inset-0 z-50 bg-richy-black">
+              <div className="h-full flex flex-col">
+                {/* Header */}
+                <div className="bg-richy-black-soft border-b border-gray-800 p-4 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-2xl">{getAgentIcon(selectedConversation.agent_type)}</span>
+                    <h2 className={`text-lg font-bold ${getAgentColor(selectedConversation.agent_type)}`}>
+                      {selectedConversation.agent_type.charAt(0).toUpperCase() + selectedConversation.agent_type.slice(1)}
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setSelectedConversation(null)}
+                    className="text-richy-gold hover:text-richy-gold-light transition-colors"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-6">
+                  <div className="border-b border-gray-800 pb-4">
+                    <p className="text-sm text-gray-500">
+                      {new Date(selectedConversation.created_at).toLocaleString('fr-FR')}
+                    </p>
+                  </div>
+
+                  {/* Input */}
+                  <div>
+                    <h3 className="text-richy-gold font-semibold mb-2">📥 Entrée :</h3>
+                    <div className="bg-richy-black-soft rounded-lg p-4">
+                      {selectedConversation.agent_type === 'chat' ? (
+                        <p className="text-gray-300 whitespace-pre-wrap text-sm">
+                          {selectedConversation.input_data?.message || JSON.stringify(selectedConversation.input_data, null, 2)}
+                        </p>
+                      ) : selectedConversation.agent_type === 'validator' ? (
+                        <div className="space-y-2 text-sm text-gray-300">
+                          {selectedConversation.input_data?.url && (
+                            <p><span className="text-richy-gold">URL :</span> {selectedConversation.input_data.url}</p>
+                          )}
+                          {selectedConversation.input_data?.description && (
+                            <p><span className="text-richy-gold">Description :</span> {selectedConversation.input_data.description}</p>
+                          )}
+                          {!selectedConversation.input_data?.url && !selectedConversation.input_data?.description && (
+                            <pre className="whitespace-pre-wrap">{JSON.stringify(selectedConversation.input_data, null, 2)}</pre>
+                          )}
+                        </div>
+                      ) : selectedConversation.agent_type === 'prompt' ? (
+                        <div className="space-y-2 text-sm text-gray-300">
+                          {selectedConversation.input_data?.description && (
+                            <p><span className="text-richy-gold">Description :</span> {selectedConversation.input_data.description}</p>
+                          )}
+                          {!selectedConversation.input_data?.description && (
+                            <pre className="whitespace-pre-wrap">{JSON.stringify(selectedConversation.input_data, null, 2)}</pre>
+                          )}
+                        </div>
+                      ) : selectedConversation.agent_type === 'builder' ? (
+                        <div className="space-y-2 text-sm text-gray-300">
+                          {selectedConversation.input_data?.description && (
+                            <p><span className="text-richy-gold">Description :</span> {selectedConversation.input_data.description}</p>
+                          )}
+                          {!selectedConversation.input_data?.description && (
+                            <pre className="whitespace-pre-wrap">{JSON.stringify(selectedConversation.input_data, null, 2)}</pre>
+                          )}
+                        </div>
+                      ) : (
+                        <pre className="text-gray-300 whitespace-pre-wrap text-sm">
+                          {JSON.stringify(selectedConversation.input_data, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Output */}
+                  <div>
+                    <h3 className="text-richy-gold font-semibold mb-2">📤 Résultat :</h3>
+                    <div className="bg-richy-black-soft rounded-lg p-4">
+                      {selectedConversation.agent_type === 'chat' ? (
+                        <p className="text-gray-300 whitespace-pre-wrap text-sm">
+                          {selectedConversation.output_data?.response || JSON.stringify(selectedConversation.output_data, null, 2)}
+                        </p>
+                      ) : selectedConversation.agent_type === 'validator' ? (
+                        <div className="space-y-3 text-sm">
+                          {selectedConversation.output_data?.score !== undefined && (
+                            <div>
+                              <span className="text-richy-gold font-semibold">Score :</span>{' '}
+                              <span className="text-white text-lg font-bold">{selectedConversation.output_data.score}/100</span>
+                            </div>
+                          )}
+                          {selectedConversation.output_data?.analysis && (
+                            <div>
+                              <span className="text-richy-gold font-semibold">Analyse :</span>
+                              <p className="text-gray-300 whitespace-pre-wrap mt-1">{selectedConversation.output_data.analysis}</p>
+                            </div>
+                          )}
+                          {selectedConversation.output_data?.response && (
+                            <p className="text-gray-300 whitespace-pre-wrap">{selectedConversation.output_data.response}</p>
+                          )}
+                          {!selectedConversation.output_data?.score && !selectedConversation.output_data?.analysis && !selectedConversation.output_data?.response && (
+                            <pre className="text-gray-300 whitespace-pre-wrap">{JSON.stringify(selectedConversation.output_data, null, 2)}</pre>
+                          )}
+                        </div>
+                      ) : selectedConversation.agent_type === 'prompt' ? (
+                        <div className="space-y-2">
+                          {selectedConversation.output_data?.prompt && (
+                            <div>
+                              <span className="text-richy-gold font-semibold">Prompt généré :</span>
+                              <pre className="text-gray-300 whitespace-pre-wrap text-sm mt-2 bg-richy-black p-3 rounded border border-gray-700">
+                                {selectedConversation.output_data.prompt}
+                              </pre>
+                            </div>
+                          )}
+                          {selectedConversation.output_data?.response && (
+                            <p className="text-gray-300 whitespace-pre-wrap text-sm">{selectedConversation.output_data.response}</p>
+                          )}
+                          {!selectedConversation.output_data?.prompt && !selectedConversation.output_data?.response && (
+                            <pre className="text-gray-300 whitespace-pre-wrap text-sm">{JSON.stringify(selectedConversation.output_data, null, 2)}</pre>
+                          )}
+                        </div>
+                      ) : selectedConversation.agent_type === 'builder' ? (
+                        <div className="space-y-2">
+                          {selectedConversation.output_data?.roadmap && (
+                            <div>
+                              <span className="text-richy-gold font-semibold">Roadmap :</span>
+                              <pre className="text-gray-300 whitespace-pre-wrap text-sm mt-2 bg-richy-black p-3 rounded border border-gray-700">
+                                {selectedConversation.output_data.roadmap}
+                              </pre>
+                            </div>
+                          )}
+                          {selectedConversation.output_data?.response && (
+                            <p className="text-gray-300 whitespace-pre-wrap text-sm">{selectedConversation.output_data.response}</p>
+                          )}
+                          {!selectedConversation.output_data?.roadmap && !selectedConversation.output_data?.response && (
+                            <pre className="text-gray-300 whitespace-pre-wrap text-sm">{JSON.stringify(selectedConversation.output_data, null, 2)}</pre>
+                          )}
+                        </div>
+                      ) : (
+                        <pre className="text-gray-300 whitespace-pre-wrap text-sm">
+                          {JSON.stringify(selectedConversation.output_data, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-3 pb-4">
+                    <Link
+                      href={`/${selectedConversation.agent_type}?conversation=${selectedConversation.id}`}
+                      onClick={() => setSelectedConversation(null)}
+                      className="flex-1 bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-2 px-4 rounded-lg text-center hover:scale-105 transition-all duration-200 shadow-lg"
+                    >
+                      Continuer cette conversation →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

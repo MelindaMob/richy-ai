@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import { DashboardHeader } from './dashboard-header'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -43,43 +44,19 @@ export default async function DashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft">
       {/* Header */}
-      <header className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/dashboard" className="font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
-            RICHY.AI
-          </Link>
-          
-          <div className="flex items-center space-x-6">
-            {/* Status abonnement */}
-            <div className="text-sm">
-              <span className="text-yellow-400">
-                🔥 Essai gratuit - {trialDaysLeft} jour(s) restant(s)
-              </span>
-            </div>
-
-            {/* User info */}
-            <div className="text-white text-sm">
-              {profile?.email || user.email}
-            </div>
-
-            {/* Logout */}
-            <form action="/api/auth/logout" method="POST">
-              <button className="text-gray-400 hover:text-white transition-colors text-sm">
-                Déconnexion
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+      <DashboardHeader 
+        trialDaysLeft={trialDaysLeft}
+        userEmail={profile?.email || user.email}
+      />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12">
         {/* Titre avec punchline Richy */}
         <div className="mb-10">
-          <h1 className="text-5xl font-bold text-white mb-3">
+          <h1 className="text-3xl md:text-5xl font-bold text-white mb-3">
             Salut champion ! 👑
           </h1>
-          <p className="text-xl text-gray-400">
+          <p className="text-base md:text-xl text-gray-400">
             Prêt à valider et construire ton SaaS ? Choisis ton agent et let's go !
           </p>
         </div>
@@ -169,7 +146,15 @@ export default async function DashboardPage() {
 
         {/* Quick Stats */}
         <div className="bg-richy-black-soft/50 rounded-2xl border border-gray-800 p-8">
-          <h2 className="text-xl font-bold text-white mb-6">📊 Tes stats</h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white">📊 Tes stats</h2>
+            <Link 
+              href="/history" 
+              className="text-richy-gold hover:text-richy-gold-light transition-colors text-sm font-medium flex items-center gap-2"
+            >
+              Voir tout l'historique →
+            </Link>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
               <p className="text-gray-400 text-sm mb-2">Conversations totales</p>
@@ -208,6 +193,60 @@ export default async function DashboardPage() {
           </div>
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="border-t border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm mt-12">
+        <div className="container mx-auto px-4 py-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Brand */}
+            <div>
+              <h3 className="font-display text-2xl text-richy-gold mb-4">RICHY.AI</h3>
+              <p className="text-gray-400 text-sm">
+                Ton assistant IA pour valider et construire ton SaaS. Pas de bullshit, que du concret.
+              </p>
+            </div>
+
+            {/* Links */}
+            <div>
+              <h4 className="text-white font-semibold mb-4">Liens utiles</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/privacy" className="text-gray-400 hover:text-richy-gold transition-colors text-sm">
+                    Politique de confidentialité
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/terms" className="text-gray-400 hover:text-richy-gold transition-colors text-sm">
+                    Conditions générales de vente
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/legal" className="text-gray-400 hover:text-richy-gold transition-colors text-sm">
+                    Mentions légales
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Support */}
+            <div>
+              <h4 className="text-white font-semibold mb-4">Support</h4>
+              <p className="text-gray-400 text-sm">
+                <a href="mailto:support@richy.ai" className="hover:text-richy-gold transition-colors">
+                  support@richy.ai
+                </a>
+              </p>
+            </div>
+          </div>
+
+          {/* Copyright */}
+          <div className="mt-8 pt-8 border-t border-gray-800 text-center">
+            <p className="text-gray-500 text-xs">
+              © {new Date().getFullYear()} RICHY.AI - Tous droits réservés
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   )
 }

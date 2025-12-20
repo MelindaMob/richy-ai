@@ -43,10 +43,10 @@ export default function PromptPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          title: ideaTitle,
-          description: ideaDescription,
+          saas_name: ideaTitle,
+          saas_description: ideaDescription,
           target_audience: targetAudience,
-          features
+          main_features: features
         }),
       })
 
