@@ -54,7 +54,7 @@ export default async function DashboardPage() {
         {/* Titre avec punchline Richy */}
         <div className="mb-10">
           <h1 className="text-3xl md:text-5xl font-bold text-white mb-3">
-            Salut champion ! 👑
+            Salut boss, t'as besoin de quoi aujourd'hui ?
           </h1>
           <p className="text-base md:text-xl text-gray-400">
             Prêt à valider et construire ton SaaS ? Choisis ton agent et let's go !
@@ -63,26 +63,6 @@ export default async function DashboardPage() {
 
         {/* Agents Grid */}
         <div className="grid md:grid-cols-2 gap-6 mb-12">
-          {/* Richy Chat */}
-          <Link href="/chat" className="group">
-            <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-8 hover:border-richy-gold/40 transition-all hover:scale-105 hover:shadow-xl hover:shadow-richy-gold/10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold text-richy-gold">
-                  💬 Richy.chat
-                </h3>
-                <span className="text-richy-gold group-hover:translate-x-2 transition-transform text-2xl">
-                  →
-                </span>
-              </div>
-              <p className="text-gray-400">
-                Ton mentor IA sans filtre. Conseils marketing, mindset, stratégie. Pas de bullshit, que du concret.
-              </p>
-              <div className="mt-4 text-sm text-gray-500">
-                Conseil • Stratégie • Mindset
-              </div>
-            </div>
-          </Link>
-
           {/* Validator */}
           <Link href="/validator" className="group">
             <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-8 hover:border-richy-gold/40 transition-all hover:scale-105 hover:shadow-xl hover:shadow-richy-gold/10">
@@ -102,6 +82,29 @@ export default async function DashboardPage() {
               </div>
             </div>
           </Link>
+
+          
+          {/* Richy Chat */} 
+          <Link href="/chat" className="group">
+            <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-8 hover:border-richy-gold/40 transition-all hover:scale-105 hover:shadow-xl hover:shadow-richy-gold/10">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-2xl font-bold text-richy-gold">
+                  💬 Richy.chat
+                </h3>
+                <span className="text-richy-gold group-hover:translate-x-2 transition-transform text-2xl">
+                  →
+                </span>
+              </div>
+              <p className="text-gray-400">
+                Ton mentor IA sans filtre. Conseils marketing, mindset, stratégie. Pas de bullshit, que du concret.
+              </p>
+              <div className="mt-4 text-sm text-gray-500">
+                Conseil • Stratégie • Mindset
+              </div>
+            </div>
+          </Link>
+
+         
 
           {/* Prompt */}
           <Link href="/prompt" className="group">
