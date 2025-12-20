@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
 
 interface DashboardHeaderProps {
   trialDaysLeft: number
@@ -10,6 +12,20 @@ interface DashboardHeaderProps {
 
 export function DashboardHeader({ trialDaysLeft, userEmail }: DashboardHeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const router = useRouter()
+  const supabase = createClient()
+
+  const handleLogout = async () => {
+    try {
+      // Déconnexion côté client
+      await supabase.auth.signOut()
+      // Redirection vers la page d'accueil
+      router.push('/')
+      router.refresh()
+    } catch (error) {
+      console.error('Erreur lors de la déconnexion:', error)
+    }
+  }
 
   return (
     <header className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0 z-50 relative">
@@ -42,11 +58,12 @@ export function DashboardHeader({ trialDaysLeft, userEmail }: DashboardHeaderPro
             </div>
 
             {/* Logout */}
-            <form action="/api/auth/logout" method="POST">
-              <button className="text-gray-400 hover:text-white transition-colors text-sm">
-                Déconnexion
-              </button>
-            </form>
+            <button 
+              onClick={handleLogout}
+              className="text-gray-400 hover:text-white transition-colors text-sm"
+            >
+              Déconnexion
+            </button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -99,14 +116,15 @@ export function DashboardHeader({ trialDaysLeft, userEmail }: DashboardHeaderPro
             {userEmail}
           </div>
 
-          <form action="/api/auth/logout" method="POST">
-            <button 
-              onClick={() => setIsMenuOpen(false)}
-              className="text-gray-400 hover:text-white transition-colors text-sm"
-            >
-              Déconnexion
-            </button>
-          </form>
+          <button 
+            onClick={() => {
+              setIsMenuOpen(false)
+              handleLogout()
+            }}
+            className="text-gray-400 hover:text-white transition-colors text-sm"
+          >
+            Déconnexion
+          </button>
         </div>
       </div>
     </header>

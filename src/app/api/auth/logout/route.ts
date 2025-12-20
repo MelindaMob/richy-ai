@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   // Déconnexion de l'utilisateur
   await supabase.auth.signOut()
   
-  // Redirection vers la page d'accueil
-  return NextResponse.redirect(new URL('/', req.url))
+  // Retourner un JSON au lieu d'une redirection (évite l'erreur 405 en production)
+  return NextResponse.json({ success: true, redirect: '/' })
 }
 
