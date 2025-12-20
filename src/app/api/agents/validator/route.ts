@@ -101,7 +101,7 @@ Fournis une analyse JSON avec:
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: 'sonar-reasoning', // <- comme dans la doc
+          model: 'sonar-reasoning-pro', // <- comme dans la doc
           messages: [
             {
               role: 'system',
