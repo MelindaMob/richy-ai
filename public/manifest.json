@@ -1,0 +1,25 @@
+{
+  "name": "Richy.ai - Valide et construis ton SaaS comme un boss",
+  "short_name": "Richy.ai",
+  "description": "Plateforme IA pour valider tes idées SaaS, générer des roadmaps personnalisées et recevoir des conseils entrepreneur",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#D4AF37",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/logo-richy.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-richy.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
+

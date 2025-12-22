@@ -19,8 +19,8 @@ export default function Home() {
       <header className="relative z-50">
         <div className="container mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
-            <Link href="/" className="font-display text-2xl text-richy-gold hover:text-richy-gold-light transition-colors">
-              RICHY.AI
+            <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+              <img src="/logo-richy.png" alt="Richy.ai" className="h-16 w-16 md:h-24 md:w-24" />
             </Link>
             
             {/* Desktop Navigation */}

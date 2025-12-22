@@ -203,7 +203,10 @@ export default async function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Brand */}
             <div>
-              <h3 className="font-display text-2xl text-richy-gold mb-4">RICHY.AI</h3>
+              <div className="flex items-center gap-2 mb-4">
+                <img src="/logo-richy.png" alt="Richy.ai" className="h-8 w-8" />
+                <h3 className="font-display text-2xl text-richy-gold">RICHY.AI</h3>
+              </div>
               <p className="text-gray-400 text-sm">
                 Ton assistant IA pour valider et construire ton SaaS. Pas de bullshit, que du concret.
               </p>

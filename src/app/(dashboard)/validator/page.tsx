@@ -88,7 +88,8 @@ export default function ValidatorPage() {
       <header className="relative z-50">
         <div className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0">
           <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <Link href="/dashboard" className="font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
+            <Link href="/dashboard" className="flex items-center gap-2 font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
+              <img src="/logo-richy.png" alt="Richy.ai" className="h-8 w-8" />
               RICHY.AI
             </Link>
             
