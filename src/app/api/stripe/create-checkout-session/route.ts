@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
         email: user.email!,
         metadata: {
           user_id: user.id
-        }
+        },
+        balance: 0 // Set initial balance to 0
       })
       customerId = customer.id
       
@@ -56,12 +57,23 @@ export async function POST(req: NextRequest) {
         stripe_customer_id: customerId,
         status: 'pending'
       })
+    } else {
+      // Si le customer existe déjà, vérifier et réinitialiser sa balance si nécessaire
+      const customer = await stripe.customers.retrieve(customerId)
+      if (customer && !customer.deleted && (customer as any).balance !== 0) {
+        // Réinitialiser la balance à 0 pour éviter les crédits appliqués
+        await stripe.customers.update(customerId, {
+          balance: 0
+        })
+      }
     }
 
-    // Sélectionner le prix
-    const priceId = priceType === 'trial' 
-      ? process.env.STRIPE_PRICE_TRIAL_ID!
-      : process.env.STRIPE_PRICE_DIRECT_ID!
+    // Utiliser le même Price ID pour les deux (49€/mois)
+    // La différence sera dans subscription_data.trial_period_days
+    const priceId = process.env.STRIPE_PRICE_DIRECT_ID!
+
+    // Si c'est un upgrade, forcer priceType à 'direct' et ne pas mettre de trial
+    const finalPriceType = isUpgrade ? 'direct' : priceType
 
     // Créer la session (pour embedded checkout)
     const session = await stripe.checkout.sessions.create({
@@ -76,14 +88,26 @@ export async function POST(req: NextRequest) {
       mode: 'subscription',
       return_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/payment-success?session_id={CHECKOUT_SESSION_ID}`,
       
+      // Désactiver les taxes automatiques pour éviter les frais supplémentaires
+      automatic_tax: {
+        enabled: false
+      },
+      
       subscription_data: {
+        // Si c'est un trial (et pas un upgrade), ajouter la période d'essai de 3 jours
+        ...(finalPriceType === 'trial' && !isUpgrade && {
+          trial_period_days: 3,
+        }),
+        // Si c'est un upgrade, ne pas mettre de trial
         metadata: {
           user_id: user.id,
-          plan_type: priceType,
+          plan_type: finalPriceType,
           is_upgrade: isUpgrade.toString()
         }
       }
     })
+    
+    console.log(`[create-checkout-session] Session created: ${session.id}, plan_type: ${finalPriceType}, is_upgrade: ${isUpgrade}`)
 
     return NextResponse.json({
       clientSecret: session.client_secret

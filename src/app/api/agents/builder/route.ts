@@ -42,11 +42,23 @@ Retourne un JSON structuré avec tous les champs.`
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = createClient()
+    const supabase = await createClient()
     
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+    }
+
+    // Vérifier les limites d'usage
+    const { checkUsageLimits } = await import('@/lib/check-limits')
+    const limitCheck = await checkUsageLimits(user.id, 'builder')
+    
+    if (!limitCheck.allowed) {
+      return NextResponse.json({
+        error: limitCheck.message,
+        reason: limitCheck.reason,
+        showUpgrade: true
+      }, { status: 403 })
     }
 
     const { project_name, project_description, budget, timeline, technical_level } = await req.json()

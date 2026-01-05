@@ -35,18 +35,22 @@ export default function LoginPage() {
       }
   
 
-      // Vérifier si l'utilisateur a une CB enregistrée
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('stripe_customer_id')
-        .eq('id', data.user.id)
-        .single()
+      // Vérifier si l'utilisateur a une subscription active
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('status, stripe_subscription_id')
+        .eq('user_id', data.user.id)
+        .maybeSingle()
 
-      if (!profile?.stripe_customer_id) {
-        // Pas de CB → onboarding
-        router.push('/onboarding')
+      // Si pas de subscription ou status invalide, rediriger vers pricing
+      // MAIS: si stripe_subscription_id existe, c'est qu'un paiement a été fait, on accepte même si status est 'pending'
+      if (!subscription || 
+          subscription.status === 'canceled' || 
+          subscription.status === 'past_due' ||
+          (subscription.status === 'pending' && !subscription.stripe_subscription_id)) {
+        router.push('/onboarding/pricing')
       } else {
-        // CB ok → dashboard
+        // Subscription active → dashboard
         router.push('/dashboard')
       }
     } catch (error: any) {

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardHeader } from './dashboard-header'
+import LockedAgentCard from './locked-agent-card'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -20,15 +21,55 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
-  // SKIP LA VÉRIFICATION STRIPE POUR LE DEV
-  // if (!profile?.stripe_customer_id) {
-  //   redirect('/onboarding')
-  // }
+  // Récupérer la subscription depuis subscriptions table
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('*')
+    .eq('user_id', user.id)
+    .maybeSingle()
 
-  // Calculer les jours restants d'essai
-  let trialDaysLeft = 3
-  if (profile?.trial_ends_at) {
-    const trialEnd = new Date(profile.trial_ends_at)
+  // Calculer les jours restants d'essai depuis subscriptions
+  let trialDaysLeft = 0
+  let subscriptionStatus = subscription?.status || 'pending'
+  let hasTrialLimitations = !!subscription?.trial_limitations
+  
+  // Si plan_type === 'trial', c'est forcément un trial, même si trial_ends_at est NULL
+  const isTrialPlan = subscription?.plan_type === 'trial'
+  
+  // Si la subscription a un trial_ends_at dans le futur, c'est un trial actif
+  const isCurrentlyTrial = subscription?.trial_ends_at && new Date(subscription.trial_ends_at) > new Date()
+  
+  // Si c'est un plan trial, forcer les limitations et calculer les jours
+  if (isTrialPlan) {
+    hasTrialLimitations = true
+    
+    if (subscription?.trial_ends_at) {
+      const trialEnd = new Date(subscription.trial_ends_at)
+      const now = new Date()
+      trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+    } else {
+      // Si trial_ends_at est NULL mais que plan_type === 'trial', 
+      // on calcule 3 jours à partir de la date de création
+      if (subscription?.created_at) {
+        const createdAt = new Date(subscription.created_at)
+        const trialEnd = new Date(createdAt)
+        trialEnd.setDate(trialEnd.getDate() + 3)
+        const now = new Date()
+        trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      } else {
+        // Par défaut, 3 jours
+        trialDaysLeft = 3
+      }
+    }
+    
+    // Si le statut n'est pas 'trialing', le forcer
+    if (subscriptionStatus !== 'trialing') {
+      subscriptionStatus = 'trialing'
+    }
+  } else if (isCurrentlyTrial) {
+    // Si trial_ends_at existe et est dans le futur, c'est aussi un trial
+    hasTrialLimitations = true
+    const trialEnd = new Date(subscription.trial_ends_at)
     const now = new Date()
     trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
   }
@@ -47,6 +88,8 @@ export default async function DashboardPage() {
       <DashboardHeader 
         trialDaysLeft={trialDaysLeft}
         userEmail={profile?.email || user.email}
+        subscriptionStatus={subscriptionStatus}
+        hasTrialLimitations={hasTrialLimitations}
       />
 
       {/* Main Content */}
@@ -107,44 +150,64 @@ export default async function DashboardPage() {
          
 
           {/* Prompt */}
-          <Link href="/prompt" className="group">
-            <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-8 hover:border-richy-gold/40 transition-all hover:scale-105 hover:shadow-xl hover:shadow-richy-gold/10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold text-richy-gold">
-                  ✨ Richy.prompt
-                </h3>
-                <span className="text-richy-gold group-hover:translate-x-2 transition-transform text-2xl">
-                  →
-                </span>
-              </div>
-              <p className="text-gray-400">
-                Transforme ton idée en prompt pro pour créer ton SaaS avec l'IA. Compatible GPT-4, Claude, Gemini.
-              </p>
-              <div className="mt-4 text-sm text-gray-500">
-                Prompts • IA • Génération
-              </div>
+          {hasTrialLimitations ? (
+            <div className="relative">
+              <LockedAgentCard
+                title="✨ Richy.prompt"
+                description="Transforme ton idée en prompt pro pour créer ton SaaS avec l'IA. Compatible GPT-4, Claude, Gemini."
+                tags="Prompts • IA • Génération"
+              />
             </div>
-          </Link>
+          ) : (
+            <Link href="/prompt" className="group">
+              <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-8 hover:border-richy-gold/40 transition-all hover:scale-105 hover:shadow-xl hover:shadow-richy-gold/10">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-2xl font-bold text-richy-gold">
+                    ✨ Richy.prompt
+                  </h3>
+                  <span className="text-richy-gold group-hover:translate-x-2 transition-transform text-2xl">
+                    →
+                  </span>
+                </div>
+                <p className="text-gray-400">
+                  Transforme ton idée en prompt pro pour créer ton SaaS avec l'IA. Compatible GPT-4, Claude, Gemini.
+                </p>
+                <div className="mt-4 text-sm text-gray-500">
+                  Prompts • IA • Génération
+                </div>
+              </div>
+            </Link>
+          )}
 
           {/* Builder */}
-          <Link href="/builder" className="group">
-            <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-8 hover:border-richy-gold/40 transition-all hover:scale-105 hover:shadow-xl hover:shadow-richy-gold/10">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-2xl font-bold text-richy-gold">
-                  🚀 Richy.builder
-                </h3>
-                <span className="text-richy-gold group-hover:translate-x-2 transition-transform text-2xl">
-                  →
-                </span>
-              </div>
-              <p className="text-gray-400">
-                Roadmap complète pour construire ton SaaS. MVP, stack technique, planning sprint par sprint.
-              </p>
-              <div className="mt-4 text-sm text-gray-500">
-                Roadmap • Planning • Stack
-              </div>
+          {hasTrialLimitations ? (
+            <div className="relative">
+              <LockedAgentCard
+                title="🚀 Richy.builder"
+                description="Roadmap complète pour construire ton SaaS. MVP, stack technique, planning sprint par sprint."
+                tags="Roadmap • Planning • Stack"
+              />
             </div>
-          </Link>
+          ) : (
+            <Link href="/builder" className="group">
+              <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-8 hover:border-richy-gold/40 transition-all hover:scale-105 hover:shadow-xl hover:shadow-richy-gold/10">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-2xl font-bold text-richy-gold">
+                    🚀 Richy.builder
+                  </h3>
+                  <span className="text-richy-gold group-hover:translate-x-2 transition-transform text-2xl">
+                    →
+                  </span>
+                </div>
+                <p className="text-gray-400">
+                  Roadmap complète pour construire ton SaaS. MVP, stack technique, planning sprint par sprint.
+                </p>
+                <div className="mt-4 text-sm text-gray-500">
+                  Roadmap • Planning • Stack
+                </div>
+              </div>
+            </Link>
+          )}
         </div>
 
         {/* Quick Stats */}

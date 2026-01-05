@@ -36,6 +36,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
 
+    // Vérifier les limites d'usage
+    const { checkUsageLimits } = await import('@/lib/check-limits')
+    const limitCheck = await checkUsageLimits(user.id, 'prompt')
+    
+    if (!limitCheck.allowed) {
+      return NextResponse.json({
+        error: limitCheck.message,
+        reason: limitCheck.reason,
+        showUpgrade: true
+      }, { status: 403 })
+    }
+
     const { title, description, target_audience, features } = await req.json()
 
     if (!title || !description || !target_audience) {

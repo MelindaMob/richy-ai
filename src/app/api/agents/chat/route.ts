@@ -91,7 +91,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
 
-    const { message, history = [] } = await req.json()
+    // Vérifier les limites d'usage
+    const { checkUsageLimits } = await import('@/lib/check-limits')
+    const limitCheck = await checkUsageLimits(user.id, 'chat')
+    
+    if (!limitCheck.allowed) {
+      return NextResponse.json({
+        error: limitCheck.message,
+        reason: limitCheck.reason,
+        showUpgrade: true
+      }, { status: 403 })
+    }
+
+    const { message, history = [], thread_id } = await req.json()
 
     if (!message) {
       return NextResponse.json({ error: 'Message requis' }, { status: 400 })
@@ -108,6 +120,9 @@ export async function POST(req: NextRequest) {
 
       const randomResponse = demoResponses[Math.floor(Math.random() * demoResponses.length)]
 
+      // Générer un thread_id si pas fourni
+      const currentThreadId = thread_id || crypto.randomUUID()
+
       await supabase.from('conversations').insert({
         user_id: user.id,
         agent_type: 'chat',
@@ -115,12 +130,15 @@ export async function POST(req: NextRequest) {
         input_data: { message },
         output_data: { response: randomResponse },
         tokens_used: 0,
+        thread_id: currentThreadId
       })
 
       return NextResponse.json({ 
         success: true, 
         response: randomResponse,
-        demo: true 
+        demo: true,
+        remaining: limitCheck.remaining,
+        isLimited: limitCheck.isLimited
       })
     }
 
@@ -148,6 +166,9 @@ export async function POST(req: NextRequest) {
 
       const response = completion.choices[0].message.content || "Désolé champion, j'ai bugué. Réessaye !"
 
+      // Générer un thread_id si pas fourni
+      const currentThreadId = thread_id || crypto.randomUUID()
+
       // Sauvegarder la conversation
       await supabase.from('conversations').insert({
         user_id: user.id,
@@ -156,11 +177,14 @@ export async function POST(req: NextRequest) {
         input_data: { message },
         output_data: { response },
         tokens_used: completion.usage?.total_tokens || 0,
+        thread_id: currentThreadId
       })
 
       return NextResponse.json({ 
         success: true, 
-        response 
+        response,
+        remaining: limitCheck.remaining,
+        isLimited: limitCheck.isLimited
       })
 
     } catch (groqError: any) {

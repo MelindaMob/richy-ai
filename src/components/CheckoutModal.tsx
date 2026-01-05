@@ -2,13 +2,12 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import {
   EmbeddedCheckoutProvider,
   EmbeddedCheckout
 } from '@stripe/react-stripe-js'
 import { Stripe } from '@stripe/stripe-js'
-import { X } from 'lucide-react'
 
 interface CheckoutModalProps {
   isOpen: boolean
@@ -20,32 +19,68 @@ interface CheckoutModalProps {
 export default function CheckoutModal({ 
   isOpen, 
   onClose, 
-  planType, 
-  stripe 
-}: CheckoutModalProps) {
-  const [clientSecret, setClientSecret] = useState('')
-  const [loading, setLoading] = useState(true)
+  planType,
+  stripe,
+  isUpgrade = false
+}: CheckoutModalProps & { isUpgrade?: boolean }) {
+  const [clientSecret, setClientSecret] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const hasFetchedSecret = useRef(false)
+  const stripeInstance = useRef<Stripe | null>(null)
+
+  // Charger l'instance Stripe
+  useEffect(() => {
+    stripe.then((s) => {
+      stripeInstance.current = s
+    })
+  }, [stripe])
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !hasFetchedSecret.current && !clientSecret) {
       fetchCheckoutSession()
     }
-  }, [isOpen, planType])
+    
+    if (!isOpen) {
+      // Reset quand le modal se ferme
+      setClientSecret(null)
+      hasFetchedSecret.current = false
+      setError(null)
+    }
+  }, [isOpen])
 
   const fetchCheckoutSession = async () => {
+    if (hasFetchedSecret.current) return
+    
     setLoading(true)
+    setError(null)
+    hasFetchedSecret.current = true
     
     try {
       const res = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priceType: planType })
+        body: JSON.stringify({ 
+          priceType: planType,
+          isUpgrade: isUpgrade
+        })
       })
       
+      if (!res.ok) {
+        throw new Error('Erreur lors de la création de la session')
+      }
+      
       const data = await res.json()
+      
+      if (!data.clientSecret) {
+        throw new Error('Aucun clientSecret reçu')
+      }
+      
       setClientSecret(data.clientSecret)
-    } catch (error) {
-      console.error('Error:', error)
+    } catch (error: any) {
+      console.error('Error fetching checkout session:', error)
+      setError(error.message || 'Erreur de chargement')
+      hasFetchedSecret.current = false
     } finally {
       setLoading(false)
     }
@@ -54,26 +89,50 @@ export default function CheckoutModal({
   if (!isOpen) return null
 
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box max-w-4xl h-[80vh] relative">
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 pointer-events-none">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/80 backdrop-blur-sm pointer-events-auto"
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div 
+        className="relative z-10 bg-richy-black-soft border border-richy-gold/20 rounded-xl w-full max-w-4xl p-6 max-h-[90vh] overflow-y-auto pointer-events-auto m-4"
+        onClick={(e) => {
+          e.stopPropagation()
+        }}
+      >
         {/* Header */}
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="font-bold text-lg">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-xl text-richy-gold">
             {planType === 'trial' ? 'Essai gratuit 3 jours' : 'Accès Premium'}
           </h3>
           <button 
             onClick={onClose}
-            className="btn btn-sm btn-circle btn-ghost"
+            className="text-gray-400 hover:text-white transition-colors"
           >
-            <X className="w-4 h-4" />
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
         {/* Content */}
-        <div className="h-[calc(100%-4rem)] overflow-auto">
+        <div className="min-h-[500px]">
           {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <span className="loading loading-spinner loading-lg text-primary"></span>
+            <div className="flex items-center justify-center h-full min-h-[500px]">
+              <span className="loading loading-spinner loading-lg text-richy-gold"></span>
+            </div>
+          ) : error ? (
+            <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4">
+              <p className="text-red-400">{error}</p>
+              <button
+                onClick={fetchCheckoutSession}
+                className="mt-4 btn btn-primary btn-sm"
+              >
+                Réessayer
+              </button>
             </div>
           ) : clientSecret ? (
             <EmbeddedCheckoutProvider
@@ -83,17 +142,12 @@ export default function CheckoutModal({
               <EmbeddedCheckout />
             </EmbeddedCheckoutProvider>
           ) : (
-            <div className="alert alert-error">
-              <span>Erreur de chargement. Réessaye.</span>
+            <div className="bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-4">
+              <p className="text-yellow-400">Erreur de chargement. Réessaye.</p>
             </div>
           )}
         </div>
       </div>
-      
-      {/* Backdrop */}
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
+    </div>
   )
 }
