@@ -17,8 +17,6 @@ function ChatContent() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
-  const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(undefined)
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -65,7 +63,8 @@ function ChatContent() {
         return
       }
 
-      // Récupérer toutes les conversations de chat de l'utilisateur
+      const threadId = conversation.input_data?.thread_id || conversation.output_data?.thread_id || conversationId
+
       const { data: allChatConversations } = await supabase
         .from('conversations')
         .select('*')
@@ -73,49 +72,15 @@ function ChatContent() {
         .eq('agent_type', 'chat')
         .order('created_at', { ascending: true })
 
-      if (!allChatConversations) {
-        setLoadingHistory(false)
-        return
-      }
-
-      // Créer un map pour trouver rapidement les conversations par ID
-      const conversationsById = new Map<string, typeof conversation>()
-      
-      // Créer le map
-      allChatConversations.forEach((conv: typeof conversation) => conversationsById.set(conv.id, conv))
-
-      // Fonction pour normaliser le thread_id (identique à celle de l'historique)
-      const normalizeThreadId = (conv: typeof conversation): string => {
-        let threadId = conv.input_data?.thread_id || conv.output_data?.thread_id
-        
-        // Si pas de thread_id explicite, cette conversation est la première du thread
-        if (!threadId) {
-          return conv.id
-        }
-        
-        // Si le thread_id correspond à l'ID d'une conversation existante,
-        // utiliser cet ID comme thread_id normalisé
-        if (conversationsById.has(threadId)) {
-          return threadId
-        }
-        
-        // Sinon, utiliser le thread_id tel quel
-        return threadId
-      }
-
-      // Normaliser le thread_id de la conversation cliquée
-      const normalizedThreadId = normalizeThreadId(conversation)
-
-      // Filtrer pour ne garder que celles du même thread
-      const threadConversations = allChatConversations.filter((conv: typeof conversation) => {
-        const convNormalizedThreadId = normalizeThreadId(conv)
-        return convNormalizedThreadId === normalizedThreadId
+      const threadConversations = (allChatConversations || []).filter(conv => {
+        const convThreadId = conv.input_data?.thread_id || conv.output_data?.thread_id || conv.id
+        return convThreadId === threadId
       })
 
       const conversationsToLoad = threadConversations.length > 0 ? threadConversations : [conversation]
       const historyMessages: Message[] = []
       
-      conversationsToLoad.forEach((conv: typeof conversation) => {
+      conversationsToLoad.forEach((conv) => {
         if (conv.input_data?.message) {
           historyMessages.push({
             role: 'user',
@@ -134,8 +99,6 @@ function ChatContent() {
 
       if (historyMessages.length > 0) {
         setMessages(historyMessages)
-        // Mettre à jour le thread_id pour les messages suivants
-        setCurrentThreadId(normalizedThreadId)
       } else {
         setMessages([{
           role: 'assistant',
@@ -177,9 +140,8 @@ function ChatContent() {
         return
       }
 
-      // Utiliser le thread_id depuis l'URL ou depuis le state
       const conversationId = searchParams.get('conversation')
-      const threadId = conversationId || currentThreadId
+      const threadId = conversationId || undefined
 
       const response = await fetch('/api/agents/chat', {
         method: 'POST',
@@ -193,12 +155,6 @@ function ChatContent() {
 
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Erreur lors de la réponse')
-
-      // Si c'est le premier message d'une nouvelle conversation, récupérer le thread_id depuis la réponse
-      // Ou si on a un conversation_id dans la réponse, l'utiliser comme thread_id pour les messages suivants
-      if (data.conversation_id && !currentThreadId) {
-        setCurrentThreadId(data.conversation_id)
-      }
 
       const assistantMessage: Message = {
         role: 'assistant',
@@ -222,117 +178,22 @@ function ChatContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft flex flex-col">
-      <header className="relative z-50">
-        <div className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <Link href="/dashboard" className="flex items-center gap-2 font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
-                <img src="/logo-richy.png" alt="Richy.ai" className="h-8 w-8" />
-                RICHY.AI
-              </Link>
-              <span className="hidden md:inline text-gray-400">•</span>
-              <span className="hidden md:inline text-white font-semibold">💬 Chat</span>
-            </div>
-            
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-6">
-              <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
-              <Link href="/validator" className="text-gray-400 hover:text-white transition-colors text-sm">Validator</Link>
-              <Link href="/prompt" className="text-gray-400 hover:text-white transition-colors text-sm">Prompt</Link>
-              <Link href="/builder" className="text-gray-400 hover:text-white transition-colors text-sm">Builder</Link>
-            </nav>
-
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="md:hidden text-richy-gold hover:text-richy-gold-light transition-colors z-50 relative"
-              aria-label="Toggle menu"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                {isMenuOpen ? (
-                  <path d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
+      <header className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Link href="/dashboard" className="font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
+              RICHY.AI
+            </Link>
+            <span className="text-gray-400">•</span>
+            <span className="text-white font-semibold">💬 Chat</span>
           </div>
+          <nav className="flex items-center space-x-6">
+            <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
+            <Link href="/validator" className="text-gray-400 hover:text-white transition-colors text-sm">Validator</Link>
+            <Link href="/prompt" className="text-gray-400 hover:text-white transition-colors text-sm">Prompt</Link>
+            <Link href="/builder" className="text-gray-400 hover:text-white transition-colors text-sm">Builder</Link>
+          </nav>
         </div>
-
-        {/* Mobile Menu - Overlay from right */}
-        <div 
-          className={`md:hidden fixed top-0 right-0 bottom-0 w-64 bg-richy-black/95 backdrop-blur-sm border-l border-richy-gold/20 py-6 px-4 space-y-4 z-40 transition-all duration-300 ease-in-out ${
-            isMenuOpen 
-              ? 'translate-x-0 opacity-100' 
-              : 'translate-x-full opacity-0 pointer-events-none'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-white font-semibold text-lg">Menu</h2>
-            <button
-              onClick={() => setIsMenuOpen(false)}
-              className="text-richy-gold hover:text-richy-gold-light transition-colors"
-              aria-label="Close menu"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          
-          <Link 
-            href="/dashboard"
-            onClick={() => setIsMenuOpen(false)}
-            className="block w-full px-4 py-3 border border-richy-gold/30 text-white rounded-lg hover:bg-richy-gold/10 transition-colors text-sm text-center"
-          >
-            ← Dashboard
-          </Link>
-          <Link 
-            href="/validator"
-            onClick={() => setIsMenuOpen(false)}
-            className="block w-full px-4 py-3 border border-richy-gold/30 text-white rounded-lg hover:bg-richy-gold/10 transition-colors text-sm text-center"
-          >
-            Validator
-          </Link>
-          <Link 
-            href="/prompt"
-            onClick={() => setIsMenuOpen(false)}
-            className="block w-full px-4 py-3 border border-richy-gold/30 text-white rounded-lg hover:bg-richy-gold/10 transition-colors text-sm text-center"
-          >
-            Prompt
-          </Link>
-          <Link 
-            href="/builder"
-            onClick={() => setIsMenuOpen(false)}
-            className="block w-full px-4 py-3 border border-richy-gold/30 text-white rounded-lg hover:bg-richy-gold/10 transition-colors text-sm text-center"
-          >
-            Builder
-          </Link>
-        </div>
-        
-        {/* Backdrop overlay */}
-        {isMenuOpen && (
-          <div
-            onClick={() => setIsMenuOpen(false)}
-            className="md:hidden fixed inset-0 bg-black/50 z-30"
-          />
-        )}
       </header>
 
       <main className="flex-1 container mx-auto px-4 py-6 max-w-4xl">

@@ -25,7 +25,6 @@ export default function ValidatorPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ValidatorResult | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -85,121 +84,27 @@ export default function ValidatorPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft">
       {/* Header */}
-      <header className="relative z-50">
-        <div className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0">
-          <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-            <Link href="/dashboard" className="flex items-center gap-2 font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
-              <img src="/logo-richy.png" alt="Richy.ai" className="h-8 w-8" />
-              RICHY.AI
-            </Link>
-            
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-6">
-              <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors">
-                ← Dashboard
-              </Link>
-              <Link href="/chat" className="text-gray-400 hover:text-white transition-colors">
-                Chat
-              </Link>
-              <Link href="/prompt" className="text-gray-400 hover:text-white transition-colors">
-                Prompt
-              </Link>
-              <Link href="/builder" className="text-gray-400 hover:text-white transition-colors">
-                Builder
-              </Link>
-            </nav>
-
-            {/* Mobile Menu Button */}
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="md:hidden text-richy-gold hover:text-richy-gold-light transition-colors z-50 relative"
-              aria-label="Toggle menu"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                {isMenuOpen ? (
-                  <path d="M6 18L18 6M6 6l12 12" />
-                ) : (
-                  <path d="M4 6h16M4 12h16M4 18h16" />
-                )}
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Menu - Overlay from right */}
-        <div 
-          className={`md:hidden fixed top-0 right-0 bottom-0 w-64 bg-richy-black/95 backdrop-blur-sm border-l border-richy-gold/20 py-6 px-4 space-y-4 z-40 transition-all duration-300 ease-in-out ${
-            isMenuOpen 
-              ? 'translate-x-0 opacity-100' 
-              : 'translate-x-full opacity-0 pointer-events-none'
-          }`}
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-white font-semibold text-lg">Menu</h2>
-            <button
-              onClick={() => setIsMenuOpen(false)}
-              className="text-richy-gold hover:text-richy-gold-light transition-colors"
-              aria-label="Close menu"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+      <header className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0 z-50">
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/dashboard" className="font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
+            RICHY.AI
+          </Link>
           
-          <Link 
-            href="/dashboard"
-            onClick={() => setIsMenuOpen(false)}
-            className="block w-full px-4 py-3 border border-richy-gold/30 text-white rounded-lg hover:bg-richy-gold/10 transition-colors text-sm text-center"
-          >
-            ← Dashboard
-          </Link>
-          <Link 
-            href="/chat"
-            onClick={() => setIsMenuOpen(false)}
-            className="block w-full px-4 py-3 border border-richy-gold/30 text-white rounded-lg hover:bg-richy-gold/10 transition-colors text-sm text-center"
-          >
-            Chat
-          </Link>
-          <Link 
-            href="/prompt"
-            onClick={() => setIsMenuOpen(false)}
-            className="block w-full px-4 py-3 border border-richy-gold/30 text-white rounded-lg hover:bg-richy-gold/10 transition-colors text-sm text-center"
-          >
-            Prompt
-          </Link>
-          <Link 
-            href="/builder"
-            onClick={() => setIsMenuOpen(false)}
-            className="block w-full px-4 py-3 border border-richy-gold/30 text-white rounded-lg hover:bg-richy-gold/10 transition-colors text-sm text-center"
-          >
-            Builder
-          </Link>
+          <nav className="flex items-center space-x-6">
+            <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors">
+              ← Dashboard
+            </Link>
+            <Link href="/chat" className="text-gray-400 hover:text-white transition-colors">
+              Chat
+            </Link>
+            <Link href="/prompt" className="text-gray-400 hover:text-white transition-colors">
+              Prompt
+            </Link>
+            <Link href="/builder" className="text-gray-400 hover:text-white transition-colors">
+              Builder
+            </Link>
+          </nav>
         </div>
-        
-        {/* Backdrop overlay */}
-        {isMenuOpen && (
-          <div
-            onClick={() => setIsMenuOpen(false)}
-            className="md:hidden fixed inset-0 bg-black/50 z-30"
-          />
-        )}
       </header>
 
       {/* Main Content */}
