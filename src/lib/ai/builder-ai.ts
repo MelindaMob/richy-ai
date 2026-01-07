@@ -5,7 +5,7 @@ const apiKey = process.env.GEMINI_API_KEY
 if (!apiKey) throw new Error('GEMINI_API_KEY is required')
 
 const genAI = new GoogleGenerativeAI(apiKey)
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
 
 export async function generateRoadmap(projectData: any) {
   const prompt = `Génère une roadmap pour le projet suivant:
