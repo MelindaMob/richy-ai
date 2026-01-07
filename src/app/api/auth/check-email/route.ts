@@ -36,13 +36,20 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Vérifier aussi dans auth.users avec le client admin
+    // Note: listUsers() peut être lent avec beaucoup d'utilisateurs, mais c'est la seule façon de vérifier
     try {
-      const { data: { users }, error: authError } = await adminSupabase.auth.admin.listUsers()
+      console.log('[check-email] Recherche dans auth.users...')
+      const { data: { users }, error: authError } = await adminSupabase.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000 // Limiter à 1000 pour éviter les problèmes de performance
+      })
       
       if (authError) {
         console.error('[check-email] Erreur lors de la vérification dans auth.users:', authError)
+        // Si erreur, on continue quand même (la vérification dans profiles devrait suffire)
       } else {
-        const emailExists = users?.some(u => u.email?.toLowerCase() === normalizedEmail)
+        console.log('[check-email] Nombre d\'utilisateurs dans auth.users:', users?.length || 0)
+        const emailExists = users?.some(u => u.email?.toLowerCase().trim() === normalizedEmail)
         if (emailExists) {
           console.log('[check-email] Email déjà utilisé dans auth.users:', normalizedEmail)
           return NextResponse.json({
@@ -50,6 +57,7 @@ export async function POST(req: NextRequest) {
             alreadyUsed: true
           }, { status: 400 })
         }
+        console.log('[check-email] Email non trouvé dans auth.users')
       }
     } catch (adminError: any) {
       console.error('[check-email] Erreur client admin:', adminError)
