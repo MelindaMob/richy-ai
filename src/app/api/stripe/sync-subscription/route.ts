@@ -187,8 +187,8 @@ export async function POST(req: NextRequest) {
       trial_ends_at: stripeSubscription.trial_end 
         ? new Date(stripeSubscription.trial_end * 1000).toISOString() 
         : null,
-      current_period_end: stripeSubscription.current_period_end
-        ? new Date(stripeSubscription.current_period_end * 1000).toISOString()
+      current_period_end: (stripeSubscription as any).current_period_end
+        ? new Date((stripeSubscription as any).current_period_end * 1000).toISOString()
         : null
     }
 
