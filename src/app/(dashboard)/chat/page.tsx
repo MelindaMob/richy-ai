@@ -19,6 +19,7 @@ function ChatContent() {
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(undefined)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -69,6 +70,7 @@ function ChatContent() {
       }
 
       const threadId = conversation.input_data?.thread_id || conversation.output_data?.thread_id || conversationId
+      setCurrentThreadId(threadId) // Sauvegarder le thread_id pour les prochains messages
 
       const { data: allChatConversations } = await supabase
         .from('conversations')
@@ -145,8 +147,8 @@ function ChatContent() {
         return
       }
 
-      const conversationId = searchParams.get('conversation')
-      const threadId = conversationId || undefined
+      // Utiliser le thread_id sauvegardé ou en créer un nouveau
+      const threadId = currentThreadId
 
       const response = await fetch('/api/agents/chat', {
         method: 'POST',
@@ -192,6 +194,11 @@ function ChatContent() {
         timestamp: new Date()
       }
       setMessages(prev => [...prev, assistantMessage])
+      
+      // Sauvegarder le thread_id si on l'a reçu et qu'on n'en avait pas encore
+      if (data.thread_id && !currentThreadId) {
+        setCurrentThreadId(data.thread_id)
+      }
 
     } catch (error: any) {
       console.error('❌ Chat error:', error)

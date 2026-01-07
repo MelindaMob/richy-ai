@@ -14,9 +14,19 @@ interface Conversation {
   created_at: string
 }
 
+interface GroupedChatConversation {
+  thread_id: string
+  first_conversation_id: string
+  first_message: string
+  message_count: number
+  created_at: string
+  last_updated: string
+}
+
 export default function HistoryPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([])
+  const [groupedChatConversations, setGroupedChatConversations] = useState<GroupedChatConversation[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedAgent, setSelectedAgent] = useState<string>('all')
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
@@ -29,7 +39,12 @@ export default function HistoryPage() {
 
   useEffect(() => {
     if (selectedAgent === 'all') {
-      setFilteredConversations(conversations)
+      // Pour 'all', on affiche les conversations groupées de chat + les autres
+      const otherConversations = conversations.filter(c => c.agent_type !== 'chat')
+      setFilteredConversations(otherConversations)
+    } else if (selectedAgent === 'chat') {
+      // Pour 'chat', on n'affiche rien dans filteredConversations car on utilise groupedChatConversations
+      setFilteredConversations([])
     } else {
       setFilteredConversations(conversations.filter(c => c.agent_type === selectedAgent))
     }
@@ -51,8 +66,52 @@ export default function HistoryPage() {
 
       if (error) throw error
 
-      setConversations(data || [])
-      setFilteredConversations(data || [])
+      const allConversations = data || []
+      setConversations(allConversations)
+
+      // Regrouper les conversations de chat par thread_id
+      const chatConversations = allConversations.filter(c => c.agent_type === 'chat')
+      const otherConversations = allConversations.filter(c => c.agent_type !== 'chat')
+
+      // Grouper par thread_id
+      const threadMap = new Map<string, Conversation[]>()
+      chatConversations.forEach(conv => {
+        const threadId = conv.input_data?.thread_id || conv.output_data?.thread_id || conv.id
+        if (!threadMap.has(threadId)) {
+          threadMap.set(threadId, [])
+        }
+        threadMap.get(threadId)!.push(conv)
+      })
+
+      // Créer les conversations groupées
+      const grouped: GroupedChatConversation[] = Array.from(threadMap.entries()).map(([threadId, convs]) => {
+        // Trier par date de création (plus ancien en premier)
+        const sorted = [...convs].sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        )
+        const first = sorted[0]
+        const last = sorted[sorted.length - 1]
+        const firstMessage = first.input_data?.message || first.title || 'Message'
+
+        return {
+          thread_id: threadId,
+          first_conversation_id: first.id,
+          first_message: firstMessage,
+          message_count: sorted.length,
+          created_at: first.created_at,
+          last_updated: last.created_at
+        }
+      })
+
+      // Trier par date de dernière mise à jour (plus récent en premier)
+      grouped.sort((a, b) => 
+        new Date(b.last_updated).getTime() - new Date(a.last_updated).getTime()
+      )
+
+      setGroupedChatConversations(grouped)
+
+      // Pour les autres types, on garde l'affichage normal
+      setFilteredConversations(otherConversations)
     } catch (error) {
       console.error('Error loading history:', error)
     } finally {
@@ -141,7 +200,7 @@ export default function HistoryPage() {
                 : 'bg-richy-black-soft text-gray-400 hover:text-white border border-gray-700'
             }`}
           >
-            Tous ({conversations.length})
+            Tous ({groupedChatConversations.length + conversations.filter(c => c.agent_type !== 'chat').length})
           </button>
           <button
             onClick={() => setSelectedAgent('chat')}
@@ -151,7 +210,7 @@ export default function HistoryPage() {
                 : 'bg-richy-black-soft text-gray-400 hover:text-white border border-gray-700'
             }`}
           >
-            💬 Chat ({conversations.filter(c => c.agent_type === 'chat').length})
+            💬 Chat ({groupedChatConversations.length})
           </button>
           <button
             onClick={() => setSelectedAgent('validator')}
@@ -193,40 +252,91 @@ export default function HistoryPage() {
               <div className="bg-richy-black-soft rounded-xl p-8 text-center">
                 <p className="text-gray-400">Chargement...</p>
               </div>
-            ) : filteredConversations.length === 0 ? (
-              <div className="bg-richy-black-soft rounded-xl p-8 text-center">
-                <p className="text-gray-400">Aucune conversation trouvée</p>
-                <Link href="/dashboard" className="text-richy-gold hover:text-richy-gold-light mt-4 inline-block">
-                  → Commencer une conversation
-                </Link>
-              </div>
             ) : (
-              filteredConversations.map((conv) => (
-                <div
-                  key={conv.id}
-                  onClick={() => setSelectedConversation(conv)}
-                  className={`bg-richy-black-soft border rounded-xl p-4 cursor-pointer transition-all hover:border-richy-gold/40 ${
-                    selectedConversation?.id === conv.id 
-                      ? 'border-richy-gold/60' 
-                      : 'border-gray-800'
-                  }`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-2xl">{getAgentIcon(conv.agent_type)}</span>
-                      <span className={`font-semibold ${getAgentColor(conv.agent_type)}`}>
-                        {conv.agent_type.charAt(0).toUpperCase() + conv.agent_type.slice(1)}
-                      </span>
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {formatDate(conv.created_at)}
-                    </span>
+              <>
+                {/* Conversations de chat groupées */}
+                {selectedAgent === 'all' || selectedAgent === 'chat' ? (
+                  groupedChatConversations.map((grouped) => (
+                    <Link
+                      key={grouped.thread_id}
+                      href={`/chat?conversation=${grouped.first_conversation_id}`}
+                      className="block"
+                    >
+                      <div className="bg-richy-black-soft border border-gray-800 rounded-xl p-4 cursor-pointer transition-all hover:border-richy-gold/40 hover:bg-richy-black/50">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-2xl">💬</span>
+                            <span className="font-semibold text-blue-400">
+                              Chat
+                            </span>
+                            {grouped.message_count > 1 && (
+                              <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
+                                {grouped.message_count} messages
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {formatDate(grouped.last_updated)}
+                          </span>
+                        </div>
+                        <h3 className="text-white font-medium line-clamp-2">
+                          {grouped.first_message}
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Clique pour continuer la conversation →
+                        </p>
+                      </div>
+                    </Link>
+                  ))
+                ) : null}
+
+                {/* Autres conversations (validator, prompt, builder) */}
+                {filteredConversations.length === 0 && (selectedAgent !== 'all' && selectedAgent !== 'chat') ? (
+                  <div className="bg-richy-black-soft rounded-xl p-8 text-center">
+                    <p className="text-gray-400">Aucune conversation trouvée</p>
+                    <Link href="/dashboard" className="text-richy-gold hover:text-richy-gold-light mt-4 inline-block">
+                      → Commencer une conversation
+                    </Link>
                   </div>
-                  <h3 className="text-white font-medium line-clamp-2">
-                    {conv.title || 'Sans titre'}
-                  </h3>
-                </div>
-              ))
+                ) : (
+                  filteredConversations.map((conv) => (
+                    <div
+                      key={conv.id}
+                      onClick={() => setSelectedConversation(conv)}
+                      className={`bg-richy-black-soft border rounded-xl p-4 cursor-pointer transition-all hover:border-richy-gold/40 ${
+                        selectedConversation?.id === conv.id 
+                          ? 'border-richy-gold/60' 
+                          : 'border-gray-800'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-2xl">{getAgentIcon(conv.agent_type)}</span>
+                          <span className={`font-semibold ${getAgentColor(conv.agent_type)}`}>
+                            {conv.agent_type.charAt(0).toUpperCase() + conv.agent_type.slice(1)}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {formatDate(conv.created_at)}
+                        </span>
+                      </div>
+                      <h3 className="text-white font-medium line-clamp-2">
+                        {conv.title || 'Sans titre'}
+                      </h3>
+                    </div>
+                  ))
+                )}
+
+                {/* Message si aucune conversation */}
+                {groupedChatConversations.length === 0 && filteredConversations.length === 0 && !loading && (
+                  <div className="bg-richy-black-soft rounded-xl p-8 text-center">
+                    <p className="text-gray-400">Aucune conversation trouvée</p>
+                    <Link href="/dashboard" className="text-richy-gold hover:text-richy-gold-light mt-4 inline-block">
+                      → Commencer une conversation
+                    </Link>
+                  </div>
+                )}
+              </>
             )}
           </div>
 

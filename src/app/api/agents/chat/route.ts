@@ -136,6 +136,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ 
         success: true, 
         response: randomResponse,
+        thread_id: currentThreadId,
         demo: true,
         remaining: limitCheck.remaining,
         isLimited: limitCheck.isLimited
@@ -196,6 +197,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ 
         success: true, 
         response,
+        thread_id: currentThreadId,
         remaining: limitCheck.remaining,
         isLimited: limitCheck.isLimited
       })
@@ -222,6 +224,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ 
         success: true, 
         response: fallbackResponse,
+        thread_id: currentThreadId,
         error: errorMessage,
         fallback: true,
         remaining: limitCheck.remaining
