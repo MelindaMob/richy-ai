@@ -97,18 +97,68 @@ function PricingChoiceContent() {
             <div className="flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
               {/* Trial Card Mobile */}
               <div className="min-w-full px-2">
-                <div className="bg-gradient-to-br from-richy-black-soft to-richy-black border border-gray-700 rounded-2xl p-6 text-center">
-                  <h2 className="text-2xl font-bold text-white mb-4">Essai Gratuit</h2>
-                  <p className="text-4xl font-bold text-richy-gold mb-2">0€ <span className="text-sm text-gray-400">/ 3 jours</span></p>
-                  <button onClick={() => handleSelectPlan('trial')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl mt-6">Essayer gratuitement</button>
+                <div className="bg-gradient-to-br from-richy-black-soft to-richy-black border border-gray-700 rounded-2xl p-6">
+                  <div className="text-center mb-6">
+                    <h2 className="text-2xl font-bold text-white mb-4">Essai Gratuit</h2>
+                    <p className="text-4xl font-bold text-richy-gold mb-2">0€ <span className="text-sm text-gray-400">/ 3 jours</span></p>
+                    <p className="text-gray-400 text-xs mb-4">Engagement 1 an</p>
+                  </div>
+                  
+                  <ul className="space-y-2 mb-6 text-left">
+                    <li className="flex items-center text-gray-300 text-sm">
+                      <span className="text-richy-gold mr-2">✓</span>
+                      <span>5 messages Chat IA</span>
+                    </li>
+                    <li className="flex items-center text-gray-300 text-sm">
+                      <span className="text-richy-gold mr-2">✓</span>
+                      <span>1 validation d'idée</span>
+                    </li>
+                    <li className="flex items-center text-gray-400 line-through text-sm">
+                      <span className="mr-2">✗</span>
+                      <span>Prompt Generator</span>
+                    </li>
+                    <li className="flex items-center text-gray-400 line-through text-sm">
+                      <span className="mr-2">✗</span>
+                      <span>Builder</span>
+                    </li>
+                  </ul>
+                  
+                  <button onClick={() => handleSelectPlan('trial')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl">Essayer gratuitement</button>
                 </div>
               </div>
               {/* Premium Card Mobile */}
               <div className="min-w-full px-2">
-                <div className="bg-gradient-to-br from-richy-black-soft to-richy-black border-2 border-richy-gold rounded-2xl p-6 text-center">
-                  <h2 className="text-2xl font-bold text-white mb-4">Accès Premium</h2>
-                  <p className="text-4xl font-bold text-richy-gold mb-2">49€ <span className="text-sm text-gray-400">/ mois</span></p>
-                  <button onClick={() => handleSelectPlan('direct')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl mt-6">Accès complet immédiat</button>
+                <div className="bg-gradient-to-br from-richy-black-soft to-richy-black border-2 border-richy-gold rounded-2xl p-6">
+                  <div className="text-center mb-6">
+                    <h2 className="text-2xl font-bold text-white mb-4">Accès Premium</h2>
+                    <p className="text-4xl font-bold text-richy-gold mb-2">49€ <span className="text-sm text-gray-400">/ mois</span></p>
+                    <p className="text-gray-400 text-xs mb-4">Engagement 1 an</p>
+                  </div>
+                  
+                  <ul className="space-y-2 mb-6 text-left">
+                    <li className="flex items-center text-gray-300 text-sm">
+                      <span className="text-richy-gold mr-2">✓</span>
+                      <span>Messages Chat IA <strong className="text-richy-gold">ILLIMITÉS</strong></span>
+                    </li>
+                    <li className="flex items-center text-gray-300 text-sm">
+                      <span className="text-richy-gold mr-2">✓</span>
+                      <span>Validations <strong className="text-richy-gold">ILLIMITÉES</strong></span>
+                    </li>
+                    <li className="flex items-center text-gray-300 text-sm">
+                      <span className="text-richy-gold mr-2">✓</span>
+                      <span>Prompt Generator illimité</span>
+                    </li>
+                    <li className="flex items-center text-gray-300 text-sm">
+                      <span className="text-richy-gold mr-2">✓</span>
+                      <span>Builder illimité</span>
+                    </li>
+                    <li className="flex items-center text-gray-300 text-sm">
+                      <span className="text-richy-gold mr-2">✓</span>
+                      <span>Support prioritaire</span>
+                    </li>
+                  </ul>
+                  
+                  <button onClick={() => handleSelectPlan('direct')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl">Accès complet immédiat</button>
                 </div>
               </div>
             </div>
@@ -119,17 +169,66 @@ function PricingChoiceContent() {
           </div>
 
           {/* Desktop Cards */}
-          <div className="hidden md:block bg-richy-black-soft border border-gray-700 rounded-2xl p-8 text-center hover:border-richy-gold/50 transition-all">
-            <h2 className="text-2xl font-bold text-white mb-4">Essai Gratuit</h2>
-            <p className="text-4xl font-bold text-richy-gold">0€</p>
-            <p className="text-gray-400 mb-6">3 jours d'essai</p>
+          <div className="hidden md:block bg-richy-black-soft border border-gray-700 rounded-2xl p-8 hover:border-richy-gold/50 transition-all">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-white mb-4">Essai Gratuit</h2>
+              <p className="text-4xl font-bold text-richy-gold mb-2">0€</p>
+              <p className="text-gray-400 text-sm mb-2">3 jours d'essai</p>
+              <p className="text-gray-400 text-xs">Engagement 1 an</p>
+            </div>
+            
+            <ul className="space-y-3 mb-6">
+              <li className="flex items-center text-gray-300 text-sm">
+                <span className="text-richy-gold mr-2">✓</span>
+                <span>5 messages Chat IA</span>
+              </li>
+              <li className="flex items-center text-gray-300 text-sm">
+                <span className="text-richy-gold mr-2">✓</span>
+                <span>1 validation d'idée</span>
+              </li>
+              <li className="flex items-center text-gray-400 line-through text-sm">
+                <span className="mr-2">✗</span>
+                <span>Prompt Generator</span>
+              </li>
+              <li className="flex items-center text-gray-400 line-through text-sm">
+                <span className="mr-2">✗</span>
+                <span>Builder</span>
+              </li>
+            </ul>
+            
             <button onClick={() => handleSelectPlan('trial')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl">Essayer</button>
           </div>
 
-          <div className="hidden md:block bg-richy-black-soft border-2 border-richy-gold rounded-2xl p-8 text-center scale-105 shadow-xl shadow-richy-gold/10">
-            <h2 className="text-2xl font-bold text-white mb-4">Accès Premium</h2>
-            <p className="text-4xl font-bold text-richy-gold">49€</p>
-            <p className="text-gray-400 mb-6">Engagement 1 an</p>
+          <div className="hidden md:block bg-richy-black-soft border-2 border-richy-gold rounded-2xl p-8 scale-105 shadow-xl shadow-richy-gold/10">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-white mb-4">Accès Premium</h2>
+              <p className="text-4xl font-bold text-richy-gold mb-2">49€</p>
+              <p className="text-gray-400 text-sm">Engagement 1 an</p>
+            </div>
+            
+            <ul className="space-y-3 mb-6">
+              <li className="flex items-center text-gray-300 text-sm">
+                <span className="text-richy-gold mr-2">✓</span>
+                <span>Messages Chat IA <strong className="text-richy-gold">ILLIMITÉS</strong></span>
+              </li>
+              <li className="flex items-center text-gray-300 text-sm">
+                <span className="text-richy-gold mr-2">✓</span>
+                <span>Validations <strong className="text-richy-gold">ILLIMITÉES</strong></span>
+              </li>
+              <li className="flex items-center text-gray-300 text-sm">
+                <span className="text-richy-gold mr-2">✓</span>
+                <span>Prompt Generator illimité</span>
+              </li>
+              <li className="flex items-center text-gray-300 text-sm">
+                <span className="text-richy-gold mr-2">✓</span>
+                <span>Builder illimité</span>
+              </li>
+              <li className="flex items-center text-gray-300 text-sm">
+                <span className="text-richy-gold mr-2">✓</span>
+                <span>Support prioritaire</span>
+              </li>
+            </ul>
+            
             <button onClick={() => handleSelectPlan('direct')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl">Prendre le plan</button>
           </div>
         </div>
