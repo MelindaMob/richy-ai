@@ -51,20 +51,25 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Vérifier aussi avec le hash dans phone_verifications si déjà vérifié
-    const { data: existingVerification } = await supabase
+    // Vérifier TOUS les enregistrements avec ce hash (pas seulement verified=true)
+    const { data: allVerifications } = await supabase
       .from('phone_verifications')
-      .select('verified, phone_hash')
+      .select('verified, phone_hash, created_at')
       .eq('phone_hash', phoneHash)
-      .eq('verified', true)
-      .maybeSingle()
+      .order('created_at', { ascending: false })
 
-    if (existingVerification) {
-      console.log('[phone-verify/send] Numéro déjà vérifié:', phoneHash)
+    // Si un enregistrement est déjà vérifié, bloquer
+    const verifiedExists = allVerifications?.some(v => v.verified === true)
+    if (verifiedExists) {
+      console.log('[phone-verify/send] Numéro déjà vérifié (verified=true):', phoneHash)
       return NextResponse.json({
         error: 'Ce numéro a déjà été vérifié et est lié à un compte. Connecte-toi ou utilise un autre numéro.',
         alreadyUsed: true
       }, { status: 400 })
     }
+    
+    // Si un enregistrement récent existe (moins de 24h) même non vérifié, on peut aussi bloquer pour éviter le spam
+    // Mais on va laisser passer pour permettre une nouvelle tentative si le code a expiré
 
     // 3. Si toutes les vérifications passent, générer et envoyer le code
     console.log('[phone-verify/send] Numéro valide, génération du code pour:', normalized)

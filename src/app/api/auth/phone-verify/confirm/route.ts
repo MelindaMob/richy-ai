@@ -101,13 +101,22 @@ export async function POST(req: NextRequest) {
     }
 
     // Marquer comme vérifié
-    await supabase
+    const { error: updateError } = await supabase
       .from('phone_verifications')
       .update({ 
         verified: true,
         verified_at: new Date().toISOString()
       })
       .eq('id', verification.id)
+
+    if (updateError) {
+      console.error('[phone-verify/confirm] Erreur mise à jour verified:', updateError)
+      return NextResponse.json({
+        error: 'Erreur lors de la validation'
+      }, { status: 500 })
+    }
+
+    console.log('[phone-verify/confirm] Numéro vérifié avec succès:', normalized)
 
     return NextResponse.json({
       success: true,

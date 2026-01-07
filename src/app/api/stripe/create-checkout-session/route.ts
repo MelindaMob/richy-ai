@@ -34,6 +34,21 @@ export async function POST(req: NextRequest) {
         }, { status: 500 })
       }
       
+      // Vérifier si l'email existe déjà dans profiles
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('email', pendingRegistration.email.toLowerCase())
+        .maybeSingle()
+      
+      if (existingProfile) {
+        console.log('[create-checkout-session] Email déjà utilisé dans profiles:', pendingRegistration.email)
+        return NextResponse.json({ 
+          error: 'Cet email est déjà enregistré. Connecte-toi ou utilise un autre email.',
+          emailAlreadyUsed: true
+        }, { status: 400 })
+      }
+      
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: pendingRegistration.email,
         password: pendingRegistration.password,
@@ -49,36 +64,21 @@ export async function POST(req: NextRequest) {
       if (signUpError) {
         console.error('[create-checkout-session] Erreur création compte:', signUpError)
         
-        // Si l'utilisateur existe déjà, essayer de se connecter
-        if (signUpError.message?.includes('already registered') || signUpError.message?.includes('User already registered')) {
-          console.log('[create-checkout-session] Utilisateur existe déjà, tentative de connexion')
-          
-          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-            email: pendingRegistration.email,
-            password: pendingRegistration.password
-          })
-          
-          if (signInError) {
-            console.error('[create-checkout-session] Erreur connexion:', signInError)
-            return NextResponse.json({ 
-              error: signInError.message || 'Erreur lors de la connexion. Vérifiez vos identifiants.' 
-            }, { status: 400 })
-          }
-          
-          if (!signInData.user) {
-            return NextResponse.json({ 
-              error: 'Impossible de se connecter' 
-            }, { status: 400 })
-          }
-          
-          user = signInData.user
-          console.log('[create-checkout-session] Connexion réussie pour utilisateur existant:', user.id)
-        } else {
-          // Retourner le message d'erreur exact de Supabase
+        // Si l'utilisateur existe déjà, retourner une erreur claire
+        if (signUpError.message?.includes('already registered') || 
+            signUpError.message?.includes('User already registered') ||
+            signUpError.message?.includes('already exists')) {
+          console.log('[create-checkout-session] Email déjà enregistré:', pendingRegistration.email)
           return NextResponse.json({ 
-            error: signUpError.message || 'Erreur lors de la création du compte. Veuillez réessayer.' 
+            error: 'Cet email est déjà enregistré. Connecte-toi ou utilise un autre email.',
+            emailAlreadyUsed: true
           }, { status: 400 })
         }
+        
+        // Retourner le message d'erreur exact de Supabase
+        return NextResponse.json({ 
+          error: signUpError.message || 'Erreur lors de la création du compte. Veuillez réessayer.' 
+        }, { status: 400 })
       } else {
         if (!signUpData.user) {
           return NextResponse.json({ 
