@@ -77,7 +77,9 @@ export default function CheckoutModal({
       })
       
       if (!res.ok) {
-        throw new Error('Erreur lors de la création de la session')
+        // Lire le message d'erreur du serveur
+        const errorData = await res.json().catch(() => ({ error: 'Erreur inconnue' }))
+        throw new Error(errorData.error || `Erreur ${res.status}: ${res.statusText}`)
       }
       
       const data = await res.json()

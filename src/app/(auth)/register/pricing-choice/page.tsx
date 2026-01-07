@@ -81,155 +81,272 @@ function PricingChoiceContent() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-richy-black via-richy-black to-richy-black-soft flex items-center justify-center p-4">
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-richy-gold/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-richy-gold/5 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-richy-gold/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-richy-gold/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
       </div>
 
-      <div className="relative z-10 max-w-4xl w-full">
+      <div className="relative z-10 max-w-5xl w-full">
         <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">Choisis ton plan Richy.ai</h1>
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 bg-gradient-to-r from-white to-richy-gold bg-clip-text text-transparent">
+            Choisis ton plan Richy.ai
+          </h1>
           <p className="text-xl text-gray-400">Essai limité ou accès complet immédiat</p>
         </div>
 
-        <div className="md:grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
+        <div className="md:grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {/* Mobile Carousel */}
           <div ref={carouselRef} className="md:hidden relative overflow-hidden" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
             <div className="flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
               {/* Trial Card Mobile */}
               <div className="min-w-full px-2">
-                <div className="bg-gradient-to-br from-richy-black-soft to-richy-black border border-gray-700 rounded-2xl p-6">
-                  <div className="text-center mb-6">
-                    <h2 className="text-2xl font-bold text-white mb-4">Essai Gratuit</h2>
-                    <p className="text-4xl font-bold text-richy-gold mb-2">0€ <span className="text-sm text-gray-400">/ 3 jours</span></p>
-                    <p className="text-gray-400 text-xs mb-4">Engagement 1 an</p>
+                <div className="relative bg-gradient-to-br from-richy-black-soft via-richy-black-soft to-richy-black border border-gray-700/50 rounded-3xl p-8 shadow-2xl hover:shadow-richy-gold/10 transition-all duration-300 overflow-hidden group">
+                  {/* Effet de brillance au hover */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-richy-gold/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                  
+                  <div className="relative z-10">
+                    <div className="text-center mb-6">
+                      <div className="inline-block bg-richy-gold/10 px-3 py-1 rounded-full mb-4">
+                        <span className="text-richy-gold text-xs font-semibold">ESSAI GRATUIT</span>
+                      </div>
+                      <h2 className="text-3xl font-bold text-white mb-3">Essai Gratuit</h2>
+                      <div className="flex items-baseline justify-center gap-2 mb-2">
+                        <span className="text-5xl font-bold text-richy-gold">0€</span>
+                        <span className="text-gray-400 text-sm">/ 3 jours</span>
+                      </div>
+                      <p className="text-gray-500 text-xs">Engagement 1 an</p>
+                    </div>
+                    
+                    <ul className="space-y-3 mb-8 text-left">
+                      <li className="flex items-start gap-3 text-gray-300">
+                        <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">5 messages Chat IA</span>
+                      </li>
+                      <li className="flex items-start gap-3 text-gray-300">
+                        <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">1 validation d'idée</span>
+                      </li>
+                      <li className="flex items-start gap-3 text-gray-400 line-through">
+                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">Prompt Generator</span>
+                      </li>
+                      <li className="flex items-start gap-3 text-gray-400 line-through">
+                        <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">Builder</span>
+                      </li>
+                    </ul>
+                    
+                    <button 
+                      onClick={() => handleSelectPlan('trial')} 
+                      className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-4 rounded-xl hover:scale-105 hover:shadow-lg hover:shadow-richy-gold/50 transition-all duration-300"
+                    >
+                      Essayer gratuitement
+                    </button>
                   </div>
-                  
-                  <ul className="space-y-2 mb-6 text-left">
-                    <li className="flex items-center text-gray-300 text-sm">
-                      <span className="text-richy-gold mr-2">✓</span>
-                      <span>5 messages Chat IA</span>
-                    </li>
-                    <li className="flex items-center text-gray-300 text-sm">
-                      <span className="text-richy-gold mr-2">✓</span>
-                      <span>1 validation d'idée</span>
-                    </li>
-                    <li className="flex items-center text-gray-400 line-through text-sm">
-                      <span className="mr-2">✗</span>
-                      <span>Prompt Generator</span>
-                    </li>
-                    <li className="flex items-center text-gray-400 line-through text-sm">
-                      <span className="mr-2">✗</span>
-                      <span>Builder</span>
-                    </li>
-                  </ul>
-                  
-                  <button onClick={() => handleSelectPlan('trial')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl">Essayer gratuitement</button>
                 </div>
               </div>
+              
               {/* Premium Card Mobile */}
               <div className="min-w-full px-2">
-                <div className="bg-gradient-to-br from-richy-black-soft to-richy-black border-2 border-richy-gold rounded-2xl p-6">
-                  <div className="text-center mb-6">
-                    <h2 className="text-2xl font-bold text-white mb-4">Accès Premium</h2>
-                    <p className="text-4xl font-bold text-richy-gold mb-2">49€ <span className="text-sm text-gray-400">/ mois</span></p>
-                    <p className="text-gray-400 text-xs mb-4">Engagement 1 an</p>
+                <div className="relative bg-gradient-to-br from-richy-black-soft via-richy-black-soft to-richy-black border-2 border-richy-gold rounded-3xl p-8 shadow-2xl shadow-richy-gold/20 hover:shadow-richy-gold/30 transition-all duration-300 overflow-hidden group scale-105">
+                  {/* Badge POPULAIRE */}
+                  <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 z-20">
+                    <span className="bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">
+                      POPULAIRE
+                    </span>
                   </div>
                   
-                  <ul className="space-y-2 mb-6 text-left">
-                    <li className="flex items-center text-gray-300 text-sm">
-                      <span className="text-richy-gold mr-2">✓</span>
-                      <span>Messages Chat IA <strong className="text-richy-gold">ILLIMITÉS</strong></span>
-                    </li>
-                    <li className="flex items-center text-gray-300 text-sm">
-                      <span className="text-richy-gold mr-2">✓</span>
-                      <span>Validations <strong className="text-richy-gold">ILLIMITÉES</strong></span>
-                    </li>
-                    <li className="flex items-center text-gray-300 text-sm">
-                      <span className="text-richy-gold mr-2">✓</span>
-                      <span>Prompt Generator illimité</span>
-                    </li>
-                    <li className="flex items-center text-gray-300 text-sm">
-                      <span className="text-richy-gold mr-2">✓</span>
-                      <span>Builder illimité</span>
-                    </li>
-                    <li className="flex items-center text-gray-300 text-sm">
-                      <span className="text-richy-gold mr-2">✓</span>
-                      <span>Support prioritaire</span>
-                    </li>
-                  </ul>
+                  {/* Effet de brillance au hover */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-richy-gold/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
                   
-                  <button onClick={() => handleSelectPlan('direct')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl">Accès complet immédiat</button>
+                  {/* Particules dorées animées */}
+                  <div className="absolute top-4 right-4 w-2 h-2 bg-richy-gold rounded-full opacity-60 animate-ping" style={{ animationDelay: '0s' }} />
+                  <div className="absolute top-8 right-8 w-1.5 h-1.5 bg-richy-gold rounded-full opacity-40 animate-ping" style={{ animationDelay: '0.5s' }} />
+                  
+                  <div className="relative z-10">
+                    <div className="text-center mb-6 mt-4">
+                      <h2 className="text-3xl font-bold text-white mb-3">Accès Premium</h2>
+                      <div className="flex items-baseline justify-center gap-2 mb-2">
+                        <span className="text-5xl font-bold text-richy-gold">49€</span>
+                        <span className="text-gray-400 text-sm">/ mois</span>
+                      </div>
+                      <p className="text-gray-500 text-xs">Engagement 1 an</p>
+                    </div>
+                    
+                    <ul className="space-y-3 mb-8 text-left">
+                      <li className="flex items-start gap-3 text-gray-300">
+                        <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">Messages Chat IA <strong className="text-richy-gold">ILLIMITÉS</strong></span>
+                      </li>
+                      <li className="flex items-start gap-3 text-gray-300">
+                        <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">Validations <strong className="text-richy-gold">ILLIMITÉES</strong></span>
+                      </li>
+                      <li className="flex items-start gap-3 text-gray-300">
+                        <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">Prompt Generator illimité</span>
+                      </li>
+                      <li className="flex items-start gap-3 text-gray-300">
+                        <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">Builder illimité</span>
+                      </li>
+                      <li className="flex items-start gap-3 text-gray-300">
+                        <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm">Support prioritaire</span>
+                      </li>
+                    </ul>
+                    
+                    <button 
+                      onClick={() => handleSelectPlan('direct')} 
+                      className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-4 rounded-xl hover:scale-105 hover:shadow-lg hover:shadow-richy-gold/50 transition-all duration-300"
+                    >
+                      Accès complet immédiat
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="flex justify-center gap-2 mt-4">
-                <div className={`h-1.5 rounded-full transition-all ${currentSlide === 0 ? 'w-6 bg-richy-gold' : 'w-2 bg-gray-600'}`} />
-                <div className={`h-1.5 rounded-full transition-all ${currentSlide === 1 ? 'w-6 bg-richy-gold' : 'w-2 bg-gray-600'}`} />
+            <div className="flex justify-center gap-2 mt-6">
+              <div className={`h-2 rounded-full transition-all ${currentSlide === 0 ? 'w-8 bg-richy-gold' : 'w-2 bg-gray-600'}`} />
+              <div className={`h-2 rounded-full transition-all ${currentSlide === 1 ? 'w-8 bg-richy-gold' : 'w-2 bg-gray-600'}`} />
             </div>
           </div>
 
           {/* Desktop Cards */}
-          <div className="hidden md:block bg-richy-black-soft border border-gray-700 rounded-2xl p-8 hover:border-richy-gold/50 transition-all">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-white mb-4">Essai Gratuit</h2>
-              <p className="text-4xl font-bold text-richy-gold mb-2">0€</p>
-              <p className="text-gray-400 text-sm mb-2">3 jours d'essai</p>
-              <p className="text-gray-400 text-xs">Engagement 1 an</p>
+          <div className="hidden md:block relative bg-gradient-to-br from-richy-black-soft via-richy-black-soft to-richy-black border border-gray-700/50 rounded-3xl p-8 shadow-2xl hover:border-richy-gold/50 hover:shadow-richy-gold/10 transition-all duration-300 overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-richy-gold/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+            
+            <div className="relative z-10">
+              <div className="text-center mb-6">
+                <div className="inline-block bg-richy-gold/10 px-3 py-1 rounded-full mb-4">
+                  <span className="text-richy-gold text-xs font-semibold">ESSAI GRATUIT</span>
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-3">Essai Gratuit</h2>
+                <div className="flex items-baseline justify-center gap-2 mb-2">
+                  <span className="text-5xl font-bold text-richy-gold">0€</span>
+                </div>
+                <p className="text-gray-400 text-sm mb-2">3 jours d'essai</p>
+                <p className="text-gray-500 text-xs">Engagement 1 an</p>
+              </div>
+              
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start gap-3 text-gray-300">
+                  <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">5 messages Chat IA</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">1 validation d'idée</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-400 line-through">
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">Prompt Generator</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-400 line-through">
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">Builder</span>
+                </li>
+              </ul>
+              
+              <button 
+                onClick={() => handleSelectPlan('trial')} 
+                className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-4 rounded-xl hover:scale-105 hover:shadow-lg hover:shadow-richy-gold/50 transition-all duration-300"
+              >
+                Essayer
+              </button>
             </div>
-            
-            <ul className="space-y-3 mb-6">
-              <li className="flex items-center text-gray-300 text-sm">
-                <span className="text-richy-gold mr-2">✓</span>
-                <span>5 messages Chat IA</span>
-              </li>
-              <li className="flex items-center text-gray-300 text-sm">
-                <span className="text-richy-gold mr-2">✓</span>
-                <span>1 validation d'idée</span>
-              </li>
-              <li className="flex items-center text-gray-400 line-through text-sm">
-                <span className="mr-2">✗</span>
-                <span>Prompt Generator</span>
-              </li>
-              <li className="flex items-center text-gray-400 line-through text-sm">
-                <span className="mr-2">✗</span>
-                <span>Builder</span>
-              </li>
-            </ul>
-            
-            <button onClick={() => handleSelectPlan('trial')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl">Essayer</button>
           </div>
 
-          <div className="hidden md:block bg-richy-black-soft border-2 border-richy-gold rounded-2xl p-8 scale-105 shadow-xl shadow-richy-gold/10">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-white mb-4">Accès Premium</h2>
-              <p className="text-4xl font-bold text-richy-gold mb-2">49€</p>
-              <p className="text-gray-400 text-sm">Engagement 1 an</p>
+          <div className="hidden md:block relative bg-gradient-to-br from-richy-black-soft via-richy-black-soft to-richy-black border-2 border-richy-gold rounded-3xl p-8 shadow-2xl shadow-richy-gold/20 hover:shadow-richy-gold/30 transition-all duration-300 overflow-hidden group scale-105">
+            {/* Badge POPULAIRE */}
+            <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-20">
+              <span className="bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black px-5 py-2 rounded-full text-sm font-bold shadow-lg">
+                POPULAIRE
+              </span>
             </div>
             
-            <ul className="space-y-3 mb-6">
-              <li className="flex items-center text-gray-300 text-sm">
-                <span className="text-richy-gold mr-2">✓</span>
-                <span>Messages Chat IA <strong className="text-richy-gold">ILLIMITÉS</strong></span>
-              </li>
-              <li className="flex items-center text-gray-300 text-sm">
-                <span className="text-richy-gold mr-2">✓</span>
-                <span>Validations <strong className="text-richy-gold">ILLIMITÉES</strong></span>
-              </li>
-              <li className="flex items-center text-gray-300 text-sm">
-                <span className="text-richy-gold mr-2">✓</span>
-                <span>Prompt Generator illimité</span>
-              </li>
-              <li className="flex items-center text-gray-300 text-sm">
-                <span className="text-richy-gold mr-2">✓</span>
-                <span>Builder illimité</span>
-              </li>
-              <li className="flex items-center text-gray-300 text-sm">
-                <span className="text-richy-gold mr-2">✓</span>
-                <span>Support prioritaire</span>
-              </li>
-            </ul>
+            {/* Effet de brillance au hover */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-richy-gold/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
             
-            <button onClick={() => handleSelectPlan('direct')} className="w-full bg-richy-gold text-black font-bold py-3 rounded-xl">Prendre le plan</button>
+            {/* Particules dorées animées */}
+            <div className="absolute top-4 right-4 w-2 h-2 bg-richy-gold rounded-full opacity-60 animate-ping" style={{ animationDelay: '0s' }} />
+            <div className="absolute top-8 right-8 w-1.5 h-1.5 bg-richy-gold rounded-full opacity-40 animate-ping" style={{ animationDelay: '0.5s' }} />
+            
+            <div className="relative z-10">
+              <div className="text-center mb-6 mt-4">
+                <h2 className="text-3xl font-bold text-white mb-3">Accès Premium</h2>
+                <div className="flex items-baseline justify-center gap-2 mb-2">
+                  <span className="text-5xl font-bold text-richy-gold">49€</span>
+                  <span className="text-gray-400 text-sm">/ mois</span>
+                </div>
+                <p className="text-gray-500 text-xs">Engagement 1 an</p>
+              </div>
+              
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start gap-3 text-gray-300">
+                  <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">Messages Chat IA <strong className="text-richy-gold">ILLIMITÉS</strong></span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">Validations <strong className="text-richy-gold">ILLIMITÉES</strong></span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">Prompt Generator illimité</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">Builder illimité</span>
+                </li>
+                <li className="flex items-start gap-3 text-gray-300">
+                  <svg className="w-5 h-5 text-richy-gold flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  <span className="text-sm">Support prioritaire</span>
+                </li>
+              </ul>
+              
+              <button 
+                onClick={() => handleSelectPlan('direct')} 
+                className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-4 rounded-xl hover:scale-105 hover:shadow-lg hover:shadow-richy-gold/50 transition-all duration-300"
+              >
+                Prendre le plan
+              </button>
+            </div>
           </div>
         </div>
       </div>
