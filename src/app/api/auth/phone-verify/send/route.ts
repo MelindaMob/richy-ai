@@ -34,7 +34,8 @@ export async function POST(req: NextRequest) {
     // Parser le numéro
     const { countryCode, phoneLast4, phoneHash, normalized } = parsePhoneNumber(phone)
 
-    // Vérifier si le numéro est déjà lié à un compte dans profiles
+    // IMPORTANT: Vérifier si le numéro est déjà lié à un compte AVANT d'envoyer le SMS
+    // 1. Vérifier dans profiles
     const { data: existingProfile } = await supabase
       .from('profiles')
       .select('id, phone_number')
@@ -42,13 +43,14 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existingProfile) {
+      console.log('[phone-verify/send] Numéro déjà utilisé dans profiles:', normalized)
       return NextResponse.json({
         error: 'Ce numéro est déjà lié à un compte. Connecte-toi avec ce numéro ou utilise un autre numéro.',
         alreadyUsed: true
       }, { status: 400 })
     }
 
-    // Vérifier aussi avec le hash dans phone_verifications si déjà vérifié
+    // 2. Vérifier aussi avec le hash dans phone_verifications si déjà vérifié
     const { data: existingVerification } = await supabase
       .from('phone_verifications')
       .select('verified, phone_hash')
@@ -57,27 +59,27 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     if (existingVerification) {
-      // Si déjà vérifié, vérifier si un compte existe avec ce hash
-      // On ne peut pas faire de join direct, donc on vérifie dans profiles
-      // Mais on peut aussi simplement dire que le numéro a déjà été utilisé
+      console.log('[phone-verify/send] Numéro déjà vérifié:', phoneHash)
       return NextResponse.json({
         error: 'Ce numéro a déjà été vérifié et est lié à un compte. Connecte-toi ou utilise un autre numéro.',
         alreadyUsed: true
       }, { status: 400 })
     }
 
-    // Générer un code à 6 chiffres
+    // 3. Si toutes les vérifications passent, générer et envoyer le code
+    console.log('[phone-verify/send] Numéro valide, génération du code pour:', normalized)
     const code = Math.floor(100000 + Math.random() * 900000).toString()
 
-    // Envoyer le SMS via Twilio
+    // Envoyer le SMS via Twilio UNIQUEMENT si les vérifications ont passé
     try {
       await twilioClient.messages.create({
         body: `Ton code de vérification Richy.ai : ${code}`,
         from: process.env.TWILIO_PHONE_NUMBER!,
         to: normalized
       })
+      console.log('[phone-verify/send] SMS envoyé avec succès')
     } catch (twilioError: any) {
-      console.error('Twilio error:', twilioError)
+      console.error('[phone-verify/send] Erreur Twilio:', twilioError)
       return NextResponse.json({
         error: 'Erreur lors de l\'envoi du SMS. Vérifie ton numéro.'
       }, { status: 500 })

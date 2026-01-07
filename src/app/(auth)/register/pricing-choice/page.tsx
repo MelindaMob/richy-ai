@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { loadStripe } from '@stripe/stripe-js'
 import CheckoutModal from '@/components/CheckoutModal'
+import Link from 'next/link'
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!)
 
@@ -79,21 +80,39 @@ function PricingChoiceContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-richy-black via-richy-black to-richy-black-soft flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-richy-black via-richy-black to-richy-black-soft">
+      {/* Background pattern */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-richy-gold/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-richy-gold/5 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-richy-gold/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-richy-gold/5 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative z-10 max-w-5xl w-full">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 bg-gradient-to-r from-white to-richy-gold bg-clip-text text-transparent">
-            Choisis ton plan Richy.ai
+      {/* Header */}
+      <header className="relative z-10 border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm">
+        <div className="container mx-auto px-4 py-4">
+          <Link href="/" className="flex items-center gap-2 font-display text-2xl text-richy-gold hover:text-richy-gold-light transition-colors">
+            RICHY.AI
+          </Link>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="relative z-10 container mx-auto px-4 py-12 md:py-20">
+        {/* Hero Section */}
+        <div className="text-center mb-12 md:mb-16">
+          <div className="inline-block bg-gradient-to-r from-richy-gold/20 to-richy-gold-dark/20 border border-richy-gold/30 rounded-full px-4 py-2 mb-6">
+            <span className="text-richy-gold text-sm font-semibold">🎯 Choisis ton plan</span>
+          </div>
+          <h1 className="text-4xl md:text-6xl font-bold text-white mb-4">
+            Commence à construire ton SaaS
           </h1>
-          <p className="text-xl text-gray-400">Essai limité ou accès complet immédiat</p>
+          <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto">
+            Essai gratuit 3 jours ou accès Premium immédiat. Tous les outils pour valider et lancer ton projet.
+          </p>
         </div>
 
-        <div className="md:grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        {/* Pricing Cards */}
+        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-8 mb-12">
           {/* Mobile Carousel */}
           <div ref={carouselRef} className="md:hidden relative overflow-hidden" onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}>
             <div className="flex transition-transform duration-300 ease-out" style={{ transform: `translateX(-${currentSlide * 100}%)` }}>
@@ -242,7 +261,7 @@ function PricingChoiceContent() {
                 <div className="flex items-baseline justify-center gap-2 mb-2">
                   <span className="text-5xl font-bold text-richy-gold">0€</span>
                 </div>
-                <p className="text-gray-400 text-sm mb-2">3 jours d'essai</p>
+                <p className="text-gray-400 text-sm mb-2">Puis 49€/mois</p>
                 <p className="text-gray-500 text-xs">Engagement 1 an</p>
               </div>
               
@@ -277,7 +296,7 @@ function PricingChoiceContent() {
                 onClick={() => handleSelectPlan('trial')} 
                 className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-4 rounded-xl hover:scale-105 hover:shadow-lg hover:shadow-richy-gold/50 transition-all duration-300"
               >
-                Essayer
+                Essayer gratuitement →
               </button>
             </div>
           </div>
@@ -344,12 +363,23 @@ function PricingChoiceContent() {
                 onClick={() => handleSelectPlan('direct')} 
                 className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-4 rounded-xl hover:scale-105 hover:shadow-lg hover:shadow-richy-gold/50 transition-all duration-300"
               >
-                Prendre le plan
+                Accès complet immédiat →
               </button>
             </div>
           </div>
         </div>
-      </div>
+
+        {/* Informations importantes */}
+        <div className="max-w-2xl mx-auto bg-richy-black-soft/50 border border-gray-700 rounded-lg p-6">
+          <h4 className="text-white font-bold mb-4">Informations importantes</h4>
+          <ul className="space-y-2 text-sm text-gray-400">
+            <li>• Paiement sécurisé via Stripe</li>
+            <li>• L'essai gratuit dure 3 jours, puis facturation automatique</li>
+            <li>• Engagement d'1 an pour le plan Premium</li>
+            <li>• Annulation possible après la période d'engagement</li>
+          </ul>
+        </div>
+      </main>
 
       {showCheckout && selectedPlan && (
         <CheckoutModal

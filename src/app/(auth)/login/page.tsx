@@ -48,7 +48,7 @@ export default function LoginPage() {
           subscription.status === 'canceled' || 
           subscription.status === 'past_due' ||
           (subscription.status === 'pending' && !subscription.stripe_subscription_id)) {
-        router.push('/onboarding/pricing')
+        router.push('/register/pricing-choice')
       } else {
         // Subscription active → dashboard
         router.push('/dashboard')
