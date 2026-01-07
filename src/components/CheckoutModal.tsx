@@ -137,11 +137,22 @@ export default function CheckoutModal({
               <span className="loading loading-spinner loading-lg text-richy-gold"></span>
             </div>
           ) : error ? (
-            <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4">
-              <p className="text-red-400">{error}</p>
+            <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-6">
+              <div className="flex items-start gap-3 mb-4">
+                <svg className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1">
+                  <h4 className="text-red-400 font-bold mb-2">Erreur lors de la création de la session</h4>
+                  <p className="text-red-300 text-sm">{error}</p>
+                </div>
+              </div>
               <button
-                onClick={fetchCheckoutSession}
-                className="mt-4 btn btn-primary btn-sm"
+                onClick={() => {
+                  hasFetchedSecret.current = false
+                  fetchCheckoutSession()
+                }}
+                className="w-full bg-richy-gold text-richy-black font-bold py-3 px-6 rounded-lg hover:bg-richy-gold-light transition-colors"
               >
                 Réessayer
               </button>

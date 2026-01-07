@@ -23,6 +23,16 @@ export async function POST(req: NextRequest) {
     // Si pendingRegistration existe, créer le compte Supabase d'abord
     if (pendingRegistration) {
       console.log('[create-checkout-session] Création du compte Supabase avant checkout')
+      console.log('[create-checkout-session] Email:', pendingRegistration.email)
+      console.log('[create-checkout-session] NEXT_PUBLIC_APP_URL:', process.env.NEXT_PUBLIC_APP_URL)
+      
+      // Vérifier que NEXT_PUBLIC_APP_URL est défini
+      if (!process.env.NEXT_PUBLIC_APP_URL) {
+        console.error('[create-checkout-session] NEXT_PUBLIC_APP_URL non défini')
+        return NextResponse.json({ 
+          error: 'Configuration serveur manquante. Veuillez contacter le support.' 
+        }, { status: 500 })
+      }
       
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email: pendingRegistration.email,
@@ -38,17 +48,50 @@ export async function POST(req: NextRequest) {
 
       if (signUpError) {
         console.error('[create-checkout-session] Erreur création compte:', signUpError)
-        return NextResponse.json({ error: 'Erreur lors de la création du compte' }, { status: 400 })
-      }
+        
+        // Si l'utilisateur existe déjà, essayer de se connecter
+        if (signUpError.message?.includes('already registered') || signUpError.message?.includes('User already registered')) {
+          console.log('[create-checkout-session] Utilisateur existe déjà, tentative de connexion')
+          
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email: pendingRegistration.email,
+            password: pendingRegistration.password
+          })
+          
+          if (signInError) {
+            console.error('[create-checkout-session] Erreur connexion:', signInError)
+            return NextResponse.json({ 
+              error: signInError.message || 'Erreur lors de la connexion. Vérifiez vos identifiants.' 
+            }, { status: 400 })
+          }
+          
+          if (!signInData.user) {
+            return NextResponse.json({ 
+              error: 'Impossible de se connecter' 
+            }, { status: 400 })
+          }
+          
+          user = signInData.user
+          console.log('[create-checkout-session] Connexion réussie pour utilisateur existant:', user.id)
+        } else {
+          // Retourner le message d'erreur exact de Supabase
+          return NextResponse.json({ 
+            error: signUpError.message || 'Erreur lors de la création du compte. Veuillez réessayer.' 
+          }, { status: 400 })
+        }
+      } else {
+        if (!signUpData.user) {
+          return NextResponse.json({ 
+            error: 'Impossible de créer le compte. Veuillez réessayer.' 
+          }, { status: 400 })
+        }
 
-      if (!signUpData.user) {
-        return NextResponse.json({ error: 'Impossible de créer le compte' }, { status: 400 })
+        user = signUpData.user
+        console.log('[create-checkout-session] Compte créé avec succès:', user.id)
       }
-
-      user = signUpData.user
 
       // Mettre à jour le profil avec les infos supplémentaires
-      await supabase
+      const { error: profileError } = await supabase
         .from('profiles')
         .update({
           full_name: pendingRegistration.full_name,
@@ -57,7 +100,10 @@ export async function POST(req: NextRequest) {
         })
         .eq('id', user.id)
 
-      console.log('[create-checkout-session] Compte créé avec succès:', user.id)
+      if (profileError) {
+        console.error('[create-checkout-session] Erreur mise à jour profil:', profileError)
+        // Ne pas bloquer le processus si la mise à jour du profil échoue
+      }
       
       // Note: Le sessionStorage sera nettoyé côté client après le checkout réussi
       // On retourne un flag pour indiquer que le compte vient d'être créé
@@ -158,7 +204,14 @@ export async function POST(req: NextRequest) {
 
     // Utiliser le même Price ID pour les deux (49€/mois)
     // La différence sera dans subscription_data.trial_period_days
-    const priceId = process.env.STRIPE_PRICE_DIRECT_ID!
+    const priceId = process.env.STRIPE_PRICE_DIRECT_ID
+
+    if (!priceId) {
+      console.error('[create-checkout-session] STRIPE_PRICE_DIRECT_ID non défini')
+      return NextResponse.json({ 
+        error: 'Configuration Stripe manquante. Veuillez contacter le support.' 
+      }, { status: 500 })
+    }
 
     // Si c'est un upgrade, forcer priceType à 'direct' et ne pas mettre de trial
     const finalPriceType = isUpgrade ? 'direct' : priceType
