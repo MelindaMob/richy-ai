@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
+import UpgradeModal from '@/components/UpgradeModal'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -17,6 +18,7 @@ function ChatContent() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -35,12 +37,15 @@ function ChatContent() {
     if (conversationId) {
       loadConversationHistory(conversationId)
     } else {
-      setMessages([{
+      // Message initial de Richy
+      const initialMessage: Message = {
         role: 'assistant',
-        content: "Wee ca dit quoi ? C'est Richy. Qu'est-ce que tu veux construire aujourd'hui ? Envoie ton idée pout voir ce qu'on peut en faire.",
+        content: "Wee ca dit quoi ? C'est Richy. Qu'est-ce que tu veux construire aujourd'hui ? Envoie ton idée pour voir ce qu'on peut en faire.",
         timestamp: new Date()
-      }])
+      }
+      setMessages([initialMessage])
       setLoadingHistory(false)
+      console.log('✅ Message initial défini')
     }
   }, [searchParams])
 
@@ -154,23 +159,68 @@ function ChatContent() {
       })
 
       const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Erreur lors de la réponse')
+      
+      if (!response.ok) {
+        const errorMsg = data.error || 'Erreur lors de la réponse'
+        console.error('❌ Erreur API chat:', errorMsg)
+        console.error('Response status:', response.status)
+        console.error('Full response:', data)
+        
+        // Si c'est une erreur de limite, ouvrir le modal d'upgrade
+        if (data.showUpgrade || data.reason === 'LIMIT_REACHED' || data.reason === 'FEATURE_LOCKED') {
+          setShowUpgradeModal(true)
+        }
+        
+        // Si c'est une erreur de clé API manquante, afficher un message clair
+        if (data.missing_api_key) {
+          throw new Error('Configuration API manquante. Contactez le support pour configurer GROQ_API_KEY.')
+        }
+        
+        throw new Error(errorMsg)
+      }
+
+      if (!data.response || typeof data.response !== 'string') {
+        console.error('❌ Réponse invalide reçue:', data)
+        throw new Error('Réponse invalide du serveur. Vérifiez les logs serveur.')
+      }
+
+      console.log('✅ Réponse reçue:', data.response.substring(0, 100) + '...')
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: data.response,
+        content: data.response.trim(),
         timestamp: new Date()
       }
       setMessages(prev => [...prev, assistantMessage])
 
     } catch (error: any) {
-      console.error('Chat error:', error)
+      console.error('❌ Chat error:', error)
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack
+      })
+      
+      // Vérifier si c'est une erreur de limite
+      const isLimitError = error.message?.includes('limite') || 
+                          error.message?.includes('limit') || 
+                          error.message?.includes('Premium') ||
+                          error.message?.includes('upgrade')
+      
       const errorMessage: Message = {
         role: 'assistant',
-        content: "Putain, y'a un bug ! 🤬 Réessaye dans quelques secondes. Si ça continue, refresh la page et reviens me voir.",
+        content: error.message?.includes('Non autorisé') 
+          ? "Tu n'es pas connecté. Reconnecte-toi et réessaye."
+          : isLimitError
+          ? "Tu as atteint ta limite de messages. Upgrade ton plan pour continuer ! 💎"
+          : "Putain, y'a un bug ! 🤬 Réessaye dans quelques secondes. Si ça continue, refresh la page et reviens me voir.",
         timestamp: new Date()
       }
       setMessages(prev => [...prev, errorMessage])
+      
+      // Ouvrir le modal d'upgrade si c'est une erreur de limite
+      if (isLimitError) {
+        setShowUpgradeModal(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -211,21 +261,34 @@ function ChatContent() {
             </div>
           ) : (
             <div className="space-y-4">
-              {messages.map((message, index) => (
-                <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[70%] rounded-lg p-4 ${message.role === 'user' ? 'bg-gradient-to-r from-richy-gold/20 to-richy-gold-dark/20 border border-richy-gold/30 text-white' : 'bg-richy-black border border-gray-700 text-gray-200'}`}>
-                    {message.role === 'assistant' && (
-                      <div className="flex items-center mb-2">
-                        <span className="text-richy-gold font-bold">RICHY</span>
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap">{message.content}</p>
-                    <span className="text-xs text-gray-500 mt-2 block">
-                      {message.timestamp.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
+              {messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-gray-500">Aucun message pour le moment</p>
                 </div>
-              ))}
+              ) : (
+                messages.map((message, index) => {
+                  // Ne pas afficher les messages vides
+                  if (!message.content || message.content.trim().length === 0) {
+                    return null
+                  }
+                  
+                  return (
+                    <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[70%] rounded-lg p-4 ${message.role === 'user' ? 'bg-gradient-to-r from-richy-gold/20 to-richy-gold-dark/20 border border-richy-gold/30 text-white' : 'bg-richy-black border border-gray-700 text-gray-200'}`}>
+                        {message.role === 'assistant' && (
+                          <div className="flex items-center mb-2">
+                            <span className="text-richy-gold font-bold">RICHY</span>
+                          </div>
+                        )}
+                        <p className="whitespace-pre-wrap">{message.content}</p>
+                        <span className="text-xs text-gray-500 mt-2 block">
+                          {message.timestamp.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
               {loading && (
                 <div className="flex justify-start">
                   <div className="bg-richy-black border border-gray-700 rounded-lg p-4">
@@ -269,6 +332,14 @@ function ChatContent() {
           💡 Exemples : "Comment valider mon idée ?", "Donne-moi une stratégie d'acquisition"
         </div>
       </main>
+
+      {showUpgradeModal && (
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          reason="LIMIT_REACHED"
+        />
+      )}
 
       <style jsx>{`
         .animation-delay-200 { animation-delay: 200ms; }

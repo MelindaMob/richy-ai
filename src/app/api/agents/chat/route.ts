@@ -164,21 +164,34 @@ export async function POST(req: NextRequest) {
         stream: false
       })
 
-      const response = completion.choices[0].message.content || "Désolé champion, j'ai bugué. Réessaye !"
+      const rawResponse = completion.choices[0]?.message?.content
+      
+      if (!rawResponse || rawResponse.trim().length === 0) {
+        console.error('❌ Réponse Groq vide ou invalide')
+        throw new Error('Réponse vide de l\'IA')
+      }
+
+      const response = rawResponse.trim()
+
+      console.log('✅ Réponse Groq reçue:', response.substring(0, 100) + '...')
 
       // Générer un thread_id si pas fourni
       const currentThreadId = thread_id || crypto.randomUUID()
 
       // Sauvegarder la conversation
-      await supabase.from('conversations').insert({
+      const { error: insertError } = await supabase.from('conversations').insert({
         user_id: user.id,
         agent_type: 'chat',
         title: message.substring(0, 50),
-        input_data: { message },
-        output_data: { response },
-        tokens_used: completion.usage?.total_tokens || 0,
-        thread_id: currentThreadId
+        input_data: { message, thread_id: currentThreadId },
+        output_data: { response, thread_id: currentThreadId },
+        tokens_used: completion.usage?.total_tokens || 0
       })
+
+      if (insertError) {
+        console.error('❌ Erreur sauvegarde conversation:', insertError)
+        // Ne pas bloquer si la sauvegarde échoue
+      }
 
       return NextResponse.json({ 
         success: true, 
@@ -193,18 +206,25 @@ export async function POST(req: NextRequest) {
       // Message d'erreur stylé Richy
       let errorMessage = "Dsl chef, y'a un bug avec l'IA 🤬 "
       
-      if (groqError.message?.includes('rate limit')) {
+      if (groqError.message?.includes('rate limit') || groqError.status === 429) {
         errorMessage += "Trop de messages d'un coup, attends 30 secondes et réessaye. Groq est gratuit mais limité à 30 messages/minute."
-      } else if (groqError.message?.includes('API key')) {
+      } else if (groqError.message?.includes('API key') || groqError.status === 401) {
         errorMessage += "La clé API Groq n'est pas valide. Vérifie ton .env.local"
+      } else if (groqError.message?.includes('model') || groqError.status === 404) {
+        errorMessage += "Le modèle Groq n'est pas disponible. Réessaye plus tard."
       } else {
         errorMessage += "Réessaye dans quelques secondes, ça devrait revenir."
       }
 
+      // En cas d'erreur Groq, retourner une réponse de fallback
+      const fallbackResponse = "Écoute champion, j'ai un petit bug technique là. Réessaye dans 10 secondes, ça devrait passer. Si ça continue, dis-moi ce que tu voulais et je te réponds direct ! 💪"
+
       return NextResponse.json({ 
-        success: false, 
+        success: true, 
+        response: fallbackResponse,
         error: errorMessage,
-        demo: false 
+        fallback: true,
+        remaining: limitCheck.remaining
       })
     }
 

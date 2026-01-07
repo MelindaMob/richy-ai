@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import UpgradeModal from '@/components/UpgradeModal'
 
 interface ValidatorResult {
   score: number
@@ -25,6 +26,7 @@ export default function ValidatorPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ValidatorResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -54,9 +56,33 @@ export default function ValidatorPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Erreur lors de la validation')
+        const errorMsg = data.error || 'Erreur lors de la validation'
+        console.error('❌ Erreur API validator:', errorMsg)
+        console.error('Response status:', response.status)
+        console.error('Full response:', data)
+        
+        // Si c'est une erreur de limite, ouvrir le modal d'upgrade
+        if (data.showUpgrade || data.reason === 'LIMIT_REACHED' || data.reason === 'FEATURE_LOCKED') {
+          setShowUpgradeModal(true)
+        }
+        
+        // Si c'est une erreur de clé API manquante, afficher un message clair
+        if (data.missing_api_key) {
+          throw new Error('Configuration API manquante. Contactez le support pour configurer PERPLEXITY_API_KEY.')
+        }
+        
+        throw new Error(errorMsg)
       }
 
+      if (!data.result) {
+        console.error('❌ Aucun résultat dans la réponse:', data)
+        throw new Error('Aucun résultat reçu du serveur. Vérifiez les logs serveur.')
+      }
+
+      console.log('✅ Résultat reçu:', data.result)
+      console.log('Strengths:', data.result.strengths)
+      console.log('Weaknesses:', data.result.weaknesses)
+      
       setResult(data.result)
     } catch (error: any) {
       setError(error.message || 'Une erreur est survenue')
@@ -153,8 +179,29 @@ export default function ValidatorPage() {
               </div>
 
               {error && (
-                <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-4">
-                  <p className="text-red-400">{error}</p>
+                <div className="bg-red-900/30 border border-red-500/50 rounded-lg p-6">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-6 h-6 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <div className="flex-1">
+                      <h4 className="text-red-400 font-bold mb-2">Erreur</h4>
+                      <p className="text-red-300 text-sm mb-3">{error}</p>
+                      {(error.includes('limite') || error.includes('limit') || error.includes('Premium')) && (
+                        <button
+                          onClick={() => setShowUpgradeModal(true)}
+                          className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-2 px-4 rounded-lg hover:scale-105 transition-all"
+                        >
+                          Upgrade Premium →
+                        </button>
+                      )}
+                      {error.includes('API manquante') && (
+                        <p className="text-red-200 text-xs mt-2">
+                          Vérifiez que les variables d'environnement sont bien configurées sur Vercel.
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -209,10 +256,14 @@ export default function ValidatorPage() {
             {/* Analyse Marché */}
             <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-6">
               <h3 className="text-xl font-bold text-richy-gold mb-4">📊 Analyse du marché</h3>
-              <p className="text-gray-300 mb-4">{result.market_analysis}</p>
+              <p className="text-gray-300 mb-4">
+                {result.market_analysis || 'Analyse indisponible. Veuillez fournir une description détaillée.'}
+              </p>
               <div className="border-t border-gray-800 pt-4">
                 <p className="text-sm text-gray-400">Cible identifiée :</p>
-                <p className="text-white mt-1">{result.target_audience}</p>
+                <p className="text-white mt-1">
+                  {result.target_audience || 'À définir'}
+                </p>
               </div>
             </div>
 
@@ -220,66 +271,86 @@ export default function ValidatorPage() {
             <div className="grid md:grid-cols-2 gap-6">
               <div className="bg-richy-black-soft border border-green-500/20 rounded-xl p-6">
                 <h3 className="text-xl font-bold text-green-400 mb-4">✅ Forces</h3>
-                <ul className="space-y-2">
-                  {result.strengths.map((strength, i) => (
-                    <li key={i} className="text-gray-300 flex items-start">
-                      <span className="text-green-400 mr-2">•</span>
-                      {strength}
-                    </li>
-                  ))}
-                </ul>
+                {result.strengths && result.strengths.length > 0 ? (
+                  <ul className="space-y-2">
+                    {result.strengths.map((strength, i) => (
+                      <li key={i} className="text-gray-300 flex items-start">
+                        <span className="text-green-400 mr-2">•</span>
+                        {strength}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-500 italic">Aucune force identifiée pour le moment.</p>
+                )}
               </div>
 
               <div className="bg-richy-black-soft border border-red-500/20 rounded-xl p-6">
                 <h3 className="text-xl font-bold text-red-400 mb-4">❌ Faiblesses</h3>
-                <ul className="space-y-2">
-                  {result.weaknesses.map((weakness, i) => (
-                    <li key={i} className="text-gray-300 flex items-start">
-                      <span className="text-red-400 mr-2">•</span>
-                      {weakness}
-                    </li>
-                  ))}
-                </ul>
+                {result.weaknesses && result.weaknesses.length > 0 ? (
+                  <ul className="space-y-2">
+                    {result.weaknesses.map((weakness, i) => (
+                      <li key={i} className="text-gray-300 flex items-start">
+                        <span className="text-red-400 mr-2">•</span>
+                        {weakness}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-500 italic">Aucune faiblesse identifiée pour le moment.</p>
+                )}
               </div>
             </div>
 
             {/* Points Critiques */}
             <div className="bg-richy-black-soft border border-orange-500/20 rounded-xl p-6">
               <h3 className="text-xl font-bold text-orange-400 mb-4">⚠️ Points critiques à corriger</h3>
-              <ul className="space-y-2">
-                {result.critical_points.map((point, i) => (
-                  <li key={i} className="text-gray-300 flex items-start">
-                    <span className="text-orange-400 mr-2">→</span>
-                    {point}
-                  </li>
-                ))}
-              </ul>
+              {result.critical_points && result.critical_points.length > 0 ? (
+                <ul className="space-y-2">
+                  {result.critical_points.map((point, i) => (
+                    <li key={i} className="text-gray-300 flex items-start">
+                      <span className="text-orange-400 mr-2">→</span>
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-500 italic">Aucun point critique identifié pour le moment.</p>
+              )}
             </div>
 
             {/* Fonctionnalités Manquantes */}
             <div className="bg-richy-black-soft border border-yellow-500/20 rounded-xl p-6">
               <h3 className="text-xl font-bold text-yellow-400 mb-4">🔧 Fonctionnalités manquantes</h3>
-              <ul className="space-y-2">
-                {result.missing_features.map((feature, i) => (
-                  <li key={i} className="text-gray-300 flex items-start">
-                    <span className="text-yellow-400 mr-2">+</span>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
+              {result.missing_features && result.missing_features.length > 0 ? (
+                <ul className="space-y-2">
+                  {result.missing_features.map((feature, i) => (
+                    <li key={i} className="text-gray-300 flex items-start">
+                      <span className="text-yellow-400 mr-2">+</span>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-500 italic">Aucune fonctionnalité manquante identifiée pour le moment.</p>
+              )}
             </div>
 
             {/* Recommandations */}
             <div className="bg-gradient-to-r from-richy-gold/10 to-richy-gold-dark/10 border border-richy-gold/30 rounded-xl p-6">
               <h3 className="text-xl font-bold text-richy-gold mb-4">💡 Mes recommandations</h3>
-              <ul className="space-y-3">
-                {result.recommendations.map((rec, i) => (
-                  <li key={i} className="text-gray-300 flex items-start">
-                    <span className="text-richy-gold font-bold mr-2">{i + 1}.</span>
-                    {rec}
-                  </li>
-                ))}
-              </ul>
+              {result.recommendations && result.recommendations.length > 0 ? (
+                <ul className="space-y-3">
+                  {result.recommendations.map((rec, i) => (
+                    <li key={i} className="text-gray-300 flex items-start">
+                      <span className="text-richy-gold font-bold mr-2">{i + 1}.</span>
+                      {rec}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-500 italic">Aucune recommandation disponible pour le moment.</p>
+              )}
             </div>
 
             {/* Complexité Technique */}
@@ -312,6 +383,14 @@ export default function ValidatorPage() {
           </div>
         )}
       </main>
+
+      {showUpgradeModal && (
+        <UpgradeModal
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          reason="LIMIT_REACHED"
+        />
+      )}
     </div>
   )
 }

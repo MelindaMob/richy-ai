@@ -3,6 +3,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 
 export default function PhoneVerification({ 
   onVerified,
@@ -40,14 +41,12 @@ export default function PhoneVerification({
       const data = await res.json()
       
       if (!res.ok) {
-        setError(data.error)
-        
-        // Si déjà utilisé, proposer le plan payant
+        // Si déjà utilisé, afficher un message avec bouton de connexion
         if (data.alreadyUsed) {
-          setTimeout(() => {
-            window.location.href = '/pricing'
-          }, 3000)
+          setError('Ce numéro est déjà lié à un compte. Connecte-toi ou utilise un autre numéro.')
+          return
         }
+        setError(data.error)
         return
       }
       
@@ -156,8 +155,16 @@ export default function PhoneVerification({
           </div>
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-              <p className="text-red-400 text-sm">{error}</p>
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+              <p className="text-red-400 text-sm mb-3">{error}</p>
+              {error.includes('déjà lié à un compte') && (
+                <Link
+                  href="/login"
+                  className="block w-full py-2 bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold rounded-lg text-center hover:scale-105 transition-all"
+                >
+                  Se connecter →
+                </Link>
+              )}
             </div>
           )}
 

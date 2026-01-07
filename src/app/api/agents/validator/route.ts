@@ -137,34 +137,80 @@ Fournis une analyse JSON avec strictement cette structure:
 
       let result
       try {
-        const startIndex = analysisContent.indexOf('{');
-        const endIndex = analysisContent.lastIndexOf('}');
-
-        if (startIndex === -1 || endIndex === -1) {
-            throw new Error('Aucun bloc JSON trouvé');
+        // Nettoyer le contenu pour extraire le JSON
+        let cleanedContent = analysisContent.trim()
+        
+        // Retirer les markdown code blocks si présents
+        if (cleanedContent.startsWith('```json')) {
+          cleanedContent = cleanedContent.replace(/^```json\s*/i, '').replace(/\s*```$/g, '').trim()
+        } else if (cleanedContent.startsWith('```')) {
+          cleanedContent = cleanedContent.replace(/^```\s*/i, '').replace(/\s*```$/g, '').trim()
         }
         
-        result = JSON.parse(analysisContent.substring(startIndex, endIndex + 1));
+        // Extraire le JSON même s'il y a du texte avant/après
+        const startIndex = cleanedContent.indexOf('{')
+        const endIndex = cleanedContent.lastIndexOf('}')
+
+        if (startIndex === -1 || endIndex === -1) {
+          throw new Error('Aucun bloc JSON trouvé dans la réponse')
+        }
         
-      } catch (parseError) {
-        console.error('❌ Erreur de parsing JSON IA. Utilisation des valeurs par défaut.')
-        result = { score: 50, verdict: 'À retravailler ⚠️' } 
+        const jsonString = cleanedContent.substring(startIndex, endIndex + 1)
+        result = JSON.parse(jsonString)
+        
+        console.log('✅ JSON parsé avec succès:', Object.keys(result))
+        
+      } catch (parseError: any) {
+        console.error('❌ Erreur de parsing JSON IA:', parseError.message)
+        console.error('Contenu reçu:', analysisContent.substring(0, 500))
+        // Utiliser des valeurs par défaut avec des arrays non vides
+        result = {
+          score: 50,
+          verdict: 'À retravailler ⚠️',
+          potential: 'Moyen',
+          market_analysis: 'Impossible d\'analyser automatiquement. Veuillez fournir plus de détails dans la description.',
+          target_audience: 'À définir',
+          strengths: ['Analyse en cours...'],
+          weaknesses: ['Analyse en cours...'],
+          critical_points: ['Analyse en cours...'],
+          missing_features: ['Analyse en cours...'],
+          technical_complexity: 'Modéré',
+          recommendations: ['Réessayez avec une description plus détaillée']
+        }
       }
 
+      // Normaliser et s'assurer que tous les champs sont présents
       const formattedResult = {
-        score: result.score || 50,
+        score: typeof result.score === 'number' ? Math.max(0, Math.min(100, result.score)) : 50,
         verdict: result.verdict || 'À retravailler ⚠️',
         potential: result.potential || 'Moyen',
-        market_analysis: result.market_analysis || 'Analyse indisponible.',
+        market_analysis: result.market_analysis || 'Analyse indisponible. Veuillez fournir une description détaillée.',
         target_audience: result.target_audience || 'À définir',
-        strengths: Array.isArray(result.strengths) ? result.strengths : [],
-        weaknesses: Array.isArray(result.weaknesses) ? result.weaknesses : [],
-        critical_points: Array.isArray(result.critical_points) ? result.critical_points : [],
-        missing_features: Array.isArray(result.missing_features) ? result.missing_features : [],
+        strengths: Array.isArray(result.strengths) && result.strengths.length > 0 
+          ? result.strengths 
+          : ['Analyse en cours...'],
+        weaknesses: Array.isArray(result.weaknesses) && result.weaknesses.length > 0
+          ? result.weaknesses
+          : ['Analyse en cours...'],
+        critical_points: Array.isArray(result.critical_points) && result.critical_points.length > 0
+          ? result.critical_points
+          : ['Analyse en cours...'],
+        missing_features: Array.isArray(result.missing_features) && result.missing_features.length > 0
+          ? result.missing_features
+          : ['Analyse en cours...'],
         technical_complexity: result.technical_complexity || 'Modéré',
-        recommendations: Array.isArray(result.recommendations) ? result.recommendations : [],
+        recommendations: Array.isArray(result.recommendations) && result.recommendations.length > 0
+          ? result.recommendations
+          : ['Réessayez avec une description plus détaillée'],
         sources: analysisData.citations || []
       }
+      
+      console.log('📊 Résultat formaté:', {
+        score: formattedResult.score,
+        verdict: formattedResult.verdict,
+        strengthsCount: formattedResult.strengths.length,
+        weaknessesCount: formattedResult.weaknesses.length
+      })
 
       await supabase.from('conversations').insert({
         user_id: user.id,
@@ -193,14 +239,38 @@ async function generateDemoResponse(userId: string, url: string, description: st
     score: 72,
     verdict: 'À retravailler ⚠️',
     potential: 'Élevé',
-    market_analysis: 'Mode démo activé.',
-    target_audience: 'Startups',
-    strengths: ['Concept intéressant'],
-    weaknesses: ['Pricing'],
-    critical_points: ['Landing page'],
-    missing_features: ['Intégrations'],
+    market_analysis: description 
+      ? `Analyse basée sur votre description: ${description.substring(0, 200)}...`
+      : 'Mode démo activé. Pour une analyse complète, configurez PERPLEXITY_API_KEY.',
+    target_audience: description 
+      ? 'Cible à identifier depuis la description'
+      : 'Startups et entrepreneurs',
+    strengths: [
+      'Concept SaaS identifié',
+      'URL accessible',
+      description ? 'Description fournie' : 'Potentiel à évaluer'
+    ],
+    weaknesses: [
+      'Analyse approfondie requise',
+      'Données de marché à compléter',
+      'Validation utilisateur nécessaire'
+    ],
+    critical_points: [
+      'Configurer PERPLEXITY_API_KEY pour une analyse complète',
+      'Fournir une description détaillée du SaaS',
+      'Valider le marché cible'
+    ],
+    missing_features: [
+      'Intégrations à définir',
+      'Fonctionnalités core à identifier',
+      'Roadmap à établir'
+    ],
     technical_complexity: 'Modéré',
-    recommendations: ['Nicher'],
+    recommendations: [
+      'Configurez PERPLEXITY_API_KEY pour une analyse IA complète',
+      'Fournissez une description détaillée incluant: cible, problème résolu, business model',
+      'Utilisez Richy.builder pour créer une roadmap détaillée'
+    ],
     sources: ['DEMO MODE']
   }
 
