@@ -35,12 +35,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Vérifier le code dans la table phone_verifications
-    // Essayer d'abord avec verification_code
-    let verification: any = null
-    let verifyError: any = null
-
-    // Essayer avec verification_code
-    const { data: verification1, error: error1 } = await supabase
+    console.log('[phone-verify/confirm] Recherche vérification pour phone_hash:', phoneHash, 'code:', code)
+    
+    const { data: verification, error: verifyError } = await supabase
       .from('phone_verifications')
       .select('*')
       .eq('phone_hash', phoneHash)
@@ -48,73 +45,95 @@ export async function POST(req: NextRequest) {
       .eq('verified', false)
       .maybeSingle()
 
-    if (!error1 && verification1) {
-      verification = verification1
-    } else if (error1 && !error1.message?.includes('verification_code')) {
-      // Si l'erreur n'est pas liée à la colonne manquante, c'est une vraie erreur
-      verifyError = error1
-    } else {
-      // Si verification_code n'existe pas, chercher juste par phone_hash et vérifier manuellement
-      // On va devoir stocker le code ailleurs ou utiliser une autre méthode
-      const { data: verification2, error: error2 } = await supabase
-        .from('phone_verifications')
-        .select('*')
-        .eq('phone_hash', phoneHash)
-        .eq('verified', false)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (!error2 && verification2) {
-        // Si on trouve un enregistrement, on accepte (en production, il faudrait vérifier le code)
-        // Pour l'instant, on accepte si l'enregistrement existe et n'est pas expiré
-        verification = verification2
-        console.warn('Colonne verification_code manquante. Ajoutez-la à la table phone_verifications pour une sécurité optimale.')
-      } else {
-        verifyError = error2 || error1
-      }
+    if (verifyError) {
+      console.error('[phone-verify/confirm] Erreur lors de la recherche:', verifyError)
+      return NextResponse.json({
+        error: 'Erreur lors de la vérification du code'
+      }, { status: 500 })
     }
 
-    // Vérifier l'expiration si code_expires_at existe
-    if (verification && verification.code_expires_at) {
+    if (!verification) {
+      console.log('[phone-verify/confirm] Aucune vérification trouvée avec ce code')
+      
+      // Vérifier si le numéro a déjà été vérifié
+      const { data: alreadyVerified } = await supabase
+        .from('phone_verifications')
+        .select('verified')
+        .eq('phone_hash', phoneHash)
+        .eq('verified', true)
+        .maybeSingle()
+      
+      if (alreadyVerified) {
+        return NextResponse.json({
+          error: 'Ce numéro a déjà été vérifié. Connecte-toi ou utilise un autre numéro.',
+          alreadyUsed: true
+        }, { status: 400 })
+      }
+      
+      return NextResponse.json({
+        error: 'Code invalide'
+      }, { status: 400 })
+    }
+
+    console.log('[phone-verify/confirm] Vérification trouvée:', verification.id)
+
+    // Vérifier l'expiration
+    if (verification.code_expires_at) {
       const expiresAt = new Date(verification.code_expires_at)
       if (new Date() > expiresAt) {
+        console.log('[phone-verify/confirm] Code expiré:', verification.code_expires_at)
         return NextResponse.json({
           error: 'Code expiré'
         }, { status: 400 })
       }
-    } else if (verification && verification.created_at) {
+    } else if (verification.created_at) {
       // Vérifier que le code a été créé il y a moins de 10 minutes
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
       const createdAt = new Date(verification.created_at)
       if (createdAt < tenMinutesAgo) {
+        console.log('[phone-verify/confirm] Code expiré (créé il y a plus de 10 min):', verification.created_at)
         return NextResponse.json({
           error: 'Code expiré'
         }, { status: 400 })
       }
     }
 
-    if (verifyError || !verification) {
-      return NextResponse.json({
-        error: 'Code invalide ou expiré'
-      }, { status: 400 })
+    // Vérifier les tentatives si la colonne existe
+    if (verification.max_attempts && verification.attempts !== undefined) {
+      if (verification.attempts >= verification.max_attempts) {
+        console.log('[phone-verify/confirm] Trop de tentatives:', verification.attempts, '/', verification.max_attempts)
+        return NextResponse.json({
+          error: 'Trop de tentatives. Demande un nouveau code.'
+        }, { status: 400 })
+      }
     }
 
     // Marquer comme vérifié
+    // Mettre à jour verified à true et incrémenter attempts si la colonne existe
+    const updateData: any = { verified: true }
+    if (verification.attempts !== undefined) {
+      updateData.attempts = (verification.attempts || 0) + 1
+    }
+    
     const { error: updateError } = await supabase
       .from('phone_verifications')
-      .update({ 
-        verified: true,
-        verified_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', verification.id)
 
     if (updateError) {
       console.error('[phone-verify/confirm] Erreur mise à jour verified:', updateError)
+      console.error('[phone-verify/confirm] Détails erreur:', {
+        message: updateError.message,
+        details: updateError.details,
+        hint: updateError.hint,
+        code: updateError.code
+      })
       return NextResponse.json({
         error: 'Erreur lors de la validation'
       }, { status: 500 })
     }
+    
+    console.log('[phone-verify/confirm] Vérification mise à jour avec succès')
 
     console.log('[phone-verify/confirm] Numéro vérifié avec succès:', normalized)
 

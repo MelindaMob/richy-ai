@@ -81,16 +81,43 @@ export default function RegisterPage() {
         return
       }
 
-      const emailCheckResponse = await fetch('/api/auth/check-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: formData.email })
-      })
+      const emailToCheck = formData.email.trim().toLowerCase()
+      console.log('[register] Vérification de l\'email:', emailToCheck)
+      
+      try {
+        const emailCheckResponse = await fetch('/api/auth/check-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: emailToCheck })
+        })
 
-      const emailCheckData = await emailCheckResponse.json()
+        const emailCheckData = await emailCheckResponse.json()
+        console.log('[register] Réponse vérification email:', {
+          status: emailCheckResponse.status,
+          ok: emailCheckResponse.ok,
+          data: emailCheckData
+        })
 
-      if (!emailCheckResponse.ok || emailCheckData.alreadyUsed) {
-        setEmailError(emailCheckData.error || 'Cet email est déjà enregistré. Connecte-toi ou utilise un autre email.')
+        if (!emailCheckResponse.ok) {
+          const errorMsg = emailCheckData.error || 'Erreur lors de la vérification de l\'email'
+          console.error('[register] Erreur vérification email:', errorMsg)
+          setEmailError(errorMsg)
+          setLoading(false)
+          return
+        }
+
+        if (emailCheckData.alreadyUsed) {
+          const errorMsg = emailCheckData.error || 'Cet email est déjà enregistré. Connecte-toi ou utilise un autre email.'
+          console.log('[register] Email déjà utilisé:', errorMsg)
+          setEmailError(errorMsg)
+          setLoading(false)
+          return
+        }
+
+        console.log('[register] Email valide, continuation...')
+      } catch (fetchError: any) {
+        console.error('[register] Erreur fetch vérification email:', fetchError)
+        setEmailError('Erreur lors de la vérification de l\'email. Veuillez réessayer.')
         setLoading(false)
         return
       }

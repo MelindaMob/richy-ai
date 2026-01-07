@@ -74,7 +74,9 @@ export default function PhoneVerification({
       const data = await res.json()
       
       if (!res.ok) {
-        setError(data.error)
+        const errorMsg = data.error || 'Erreur lors de la vérification'
+        console.error('[PhoneVerification] Erreur vérification code:', errorMsg, data)
+        setError(errorMsg)
         return
       }
       
