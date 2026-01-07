@@ -16,6 +16,7 @@ export default function RegisterPage() {
   })
   const [error, setError] = useState<string | null>(null)
   const [phoneError, setPhoneError] = useState<string | null>(null)
+  const [emailError, setEmailError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'register' | 'phone-verify'>('register')
   const [phoneVerified, setPhoneVerified] = useState(false)
@@ -67,25 +68,59 @@ export default function RegisterPage() {
       e.preventDefault()
     }
     
-    // Valider le numéro de téléphone avant de continuer
-    const phoneValidation = validatePhoneNumber(formData.phone_number)
-    if (!phoneValidation.valid) {
-      setPhoneError(phoneValidation.error)
-      return
-    }
-    
+    setError(null)
+    setEmailError(null)
     setPhoneError(null)
+    setLoading(true)
     
-    // Si pas encore vérifié le téléphone, passer à l'étape de vérification
-    if (step === 'register' && formData.phone_number && !phoneVerified) {
-      setStep('phone-verify')
-      return
+    try {
+      // 1. Vérifier d'abord si l'email existe déjà
+      if (!formData.email || !formData.email.trim()) {
+        setEmailError('L\'email est requis')
+        setLoading(false)
+        return
+      }
+
+      const emailCheckResponse = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email })
+      })
+
+      const emailCheckData = await emailCheckResponse.json()
+
+      if (!emailCheckResponse.ok || emailCheckData.alreadyUsed) {
+        setEmailError(emailCheckData.error || 'Cet email est déjà enregistré. Connecte-toi ou utilise un autre email.')
+        setLoading(false)
+        return
+      }
+
+      // 2. Valider le numéro de téléphone
+      const phoneValidation = validatePhoneNumber(formData.phone_number)
+      if (!phoneValidation.valid) {
+        setPhoneError(phoneValidation.error)
+        setLoading(false)
+        return
+      }
+      
+      setPhoneError(null)
+      
+      // 3. Si toutes les validations passent, passer à l'étape de vérification du téléphone
+      if (step === 'register' && formData.phone_number && !phoneVerified) {
+        setStep('phone-verify')
+        setLoading(false)
+        return
+      }
+      
+      // Si on arrive ici, c'est qu'on a déjà vérifié le téléphone
+      // Dans ce cas, on devrait déjà avoir été redirigé vers pricing-choice
+      setError('Veuillez vérifier votre numéro de téléphone d\'abord')
+    } catch (err: any) {
+      console.error('Erreur lors de la vérification:', err)
+      setError(err.message || 'Erreur lors de la vérification. Veuillez réessayer.')
+    } finally {
+      setLoading(false)
     }
-    
-    // Si on arrive ici, c'est qu'on a déjà vérifié le téléphone
-    // Dans ce cas, on devrait déjà avoir été redirigé vers pricing-choice
-    // Cette fonction ne devrait normalement pas être appelée après vérification
-    setError('Veuillez vérifier votre numéro de téléphone d\'abord')
   }
 
   return (
@@ -148,11 +183,21 @@ export default function RegisterPage() {
               <input
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                className="w-full px-4 py-3 bg-richy-black border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-richy-gold transition-colors"
+                onChange={(e) => {
+                  setFormData({...formData, email: e.target.value})
+                  setEmailError(null) // Réinitialiser l'erreur quand l'utilisateur tape
+                }}
+                className={`w-full px-4 py-3 bg-richy-black border rounded-lg text-white placeholder-gray-500 focus:outline-none transition-colors ${
+                  emailError ? 'border-red-500' : 'border-gray-700 focus:border-richy-gold'
+                }`}
                 placeholder="ton@email.com"
                 required
               />
+              {emailError && (
+                <p className="text-xs text-red-400 mt-1">
+                  {emailError}
+                </p>
+              )}
             </div>
 
             <div>
@@ -256,10 +301,10 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading || !!phoneError || !validatePhoneNumber(formData.phone_number).valid}
+              disabled={loading || !!phoneError || !!emailError || !validatePhoneNumber(formData.phone_number).valid || !formData.email.trim()}
               className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-3 px-6 rounded-lg hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
             >
-              {loading ? 'Création...' : 'Suivant →'}
+              {loading ? 'Vérification...' : 'Suivant →'}
             </button>
           </form>
             </>
