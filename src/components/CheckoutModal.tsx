@@ -14,6 +14,14 @@ interface CheckoutModalProps {
   onClose: () => void
   planType: 'trial' | 'direct'
   stripe: Promise<Stripe | null>
+  pendingRegistration?: {
+    email: string
+    password: string
+    full_name: string
+    company_name: string
+    phone_number: string
+    phone_verified: boolean
+  }
 }
 
 export default function CheckoutModal({ 
@@ -21,6 +29,7 @@ export default function CheckoutModal({
   onClose, 
   planType,
   stripe,
+  pendingRegistration,
   isUpgrade = false
 }: CheckoutModalProps & { isUpgrade?: boolean }) {
   const [clientSecret, setClientSecret] = useState<string | null>(null)
@@ -62,7 +71,8 @@ export default function CheckoutModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           priceType: planType,
-          isUpgrade: isUpgrade
+          isUpgrade: isUpgrade,
+          pendingRegistration: pendingRegistration // Passer les infos d'inscription
         })
       })
       

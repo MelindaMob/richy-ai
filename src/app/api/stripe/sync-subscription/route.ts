@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     
     console.log('[sync-subscription] User authenticated:', user.id, user.email)
 
-    // Récupérer la subscription depuis la DB
+    // Récupérer la subscription depuis la DB (pour avoir le customer_id)
     let { data: subscription } = await supabase
       .from('subscriptions')
       .select('*')
@@ -37,10 +37,17 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
 
     let stripeSubscription: Stripe.Subscription | null = null
+    let customerId: string | null = null
 
-    // Si pas de subscription dans la DB, chercher dans Stripe
-    if (!subscription?.stripe_subscription_id) {
-      console.log(`[sync-subscription] No subscription in DB, searching in Stripe for user ${user.id}, email: ${user.email}`)
+    // Récupérer le customer_id depuis la DB
+    if (subscription?.stripe_customer_id) {
+      customerId = subscription.stripe_customer_id
+      console.log(`[sync-subscription] Using customer_id from DB: ${customerId}`)
+    }
+
+    // Si pas de customer_id, chercher dans Stripe
+    if (!customerId) {
+      console.log(`[sync-subscription] No customer_id in DB, searching in Stripe for user ${user.id}, email: ${user.email}`)
       
       let customer: Stripe.Customer | null = null
       
@@ -50,7 +57,7 @@ export async function POST(req: NextRequest) {
       
       const customersByEmail = await stripe.customers.list({
         email: normalizedEmail,
-        limit: 100 // Augmenter la limite pour être sûr
+        limit: 100
       })
 
       console.log(`[sync-subscription] Found ${customersByEmail.data.length} customer(s) by email`)
@@ -65,7 +72,7 @@ export async function POST(req: NextRequest) {
       if (!customer) {
         console.log(`[sync-subscription] Customer not found by email, searching by metadata user_id`)
         const allCustomers = await stripe.customers.list({
-          limit: 100 // Limite pour la recherche
+          limit: 100
         })
         
         for (const c of allCustomers.data) {
@@ -78,65 +85,88 @@ export async function POST(req: NextRequest) {
       }
 
       if (customer) {
-        // Récupérer TOUTES les subscriptions actives de ce customer (prendre la plus récente)
-        const subscriptions = await stripe.subscriptions.list({
-          customer: customer.id,
-          status: 'all',
-          limit: 100 // Récupérer toutes les subscriptions
-        })
-
-        console.log(`[sync-subscription] Found ${subscriptions.data.length} subscription(s) for customer ${customer.id}`)
-
-        if (subscriptions.data.length > 0) {
-          // Filtrer les subscriptions actives ou trialing
-          const activeSubs = subscriptions.data.filter(sub => 
-            sub.status === 'active' || sub.status === 'trialing'
-          )
-          
-          if (activeSubs.length > 0) {
-            // Trier par created (plus récent en premier) et prendre la première
-            const sortedSubs = activeSubs.sort((a, b) => b.created - a.created)
-            stripeSubscription = sortedSubs[0]
-            console.log(`[sync-subscription] Using most recent active subscription: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
-          } else {
-            // Si pas d'active, prendre la plus récente même si canceled
-            const sortedSubs = subscriptions.data.sort((a, b) => b.created - a.created)
-            stripeSubscription = sortedSubs[0]
-            console.log(`[sync-subscription] No active subscription, using most recent (status: ${stripeSubscription.status}): ${stripeSubscription.id}`)
-          }
-        }
-      }
-
-      if (!stripeSubscription) {
-        console.error(`[sync-subscription] No subscription found in Stripe for user ${user.id}, email: ${user.email}`)
-        return NextResponse.json({ 
-          error: 'Aucune subscription trouvée dans Stripe. Vérifie que tu as bien complété le paiement.',
-          userId: user.id,
-          email: user.email,
-          customerFound: !!customer
-        }, { status: 404 })
-      }
-    } else {
-      // Récupérer la subscription depuis Stripe
-      try {
-        stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripe_subscription_id)
-      } catch (error: any) {
-        console.error(`[sync-subscription] Error retrieving subscription ${subscription.stripe_subscription_id}:`, error)
-        // Si la subscription n'existe plus dans Stripe, chercher une nouvelle
-        return NextResponse.json({ 
-          error: 'La subscription dans la base de données n\'existe plus dans Stripe. Recherche d\'une nouvelle subscription...',
-          userId: user.id
-        }, { status: 404 })
+        customerId = customer.id
       }
     }
 
-    // Vérifier si c'est Premium (pas de trial_end ou status active sans trial)
-    const hasTrialEnd = stripeSubscription.trial_end && stripeSubscription.trial_end > Math.floor(Date.now() / 1000)
-    const isPremium = stripeSubscription.metadata?.is_upgrade === 'true' || 
-                     (!hasTrialEnd && stripeSubscription.status === 'active') ||
-                     (stripeSubscription.metadata?.plan_type === 'direct' && !hasTrialEnd)
+    // Si on a un customer_id, chercher TOUTES les subscriptions (même canceled)
+    // et prendre la plus récente qui correspond à un upgrade ou qui est active
+    if (customerId) {
+      const subscriptions = await stripe.subscriptions.list({
+        customer: customerId,
+        status: 'all',
+        limit: 100
+      })
 
-    console.log(`[sync-subscription] User: ${user.id}, Status: ${stripeSubscription.status}, Trial end: ${stripeSubscription.trial_end}, Is Premium: ${isPremium}`)
+      console.log(`[sync-subscription] Found ${subscriptions.data.length} subscription(s) for customer ${customerId}`)
+
+      if (subscriptions.data.length > 0) {
+        // Trier toutes les subscriptions par created (plus récent en premier)
+        const sortedSubs = subscriptions.data.sort((a, b) => b.created - a.created)
+        
+        // Chercher d'abord une subscription active/trialing avec upgrade ou plan_type direct
+        const activeUpgrade = sortedSubs.find(sub => 
+          (sub.status === 'active' || sub.status === 'trialing' || sub.status === 'incomplete') &&
+          (sub.metadata?.is_upgrade === 'true' || sub.metadata?.plan_type === 'direct')
+        )
+        
+        if (activeUpgrade) {
+          stripeSubscription = activeUpgrade
+          console.log(`[sync-subscription] Using active upgrade subscription: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
+        } else {
+          // Sinon, prendre la plus récente active/trialing
+          const activeSub = sortedSubs.find(sub => 
+            sub.status === 'active' || sub.status === 'trialing' || sub.status === 'incomplete'
+          )
+          
+          if (activeSub) {
+            stripeSubscription = activeSub
+            console.log(`[sync-subscription] Using most recent active subscription: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
+          } else {
+            // En dernier recours, prendre la plus récente même si canceled (peut être un upgrade récent)
+            stripeSubscription = sortedSubs[0]
+            console.log(`[sync-subscription] Using most recent subscription (may be canceled): ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
+          }
+        }
+      }
+    }
+
+    // Si pas trouvé et qu'on a une subscription dans la DB, essayer de la récupérer
+    if (!stripeSubscription && subscription?.stripe_subscription_id) {
+      try {
+        stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripe_subscription_id)
+        console.log(`[sync-subscription] Retrieved subscription from DB: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
+      } catch (error: any) {
+        console.error(`[sync-subscription] Error retrieving subscription ${subscription.stripe_subscription_id}:`, error)
+      }
+    }
+
+    if (!stripeSubscription) {
+      console.error(`[sync-subscription] No subscription found in Stripe for user ${user.id}, email: ${user.email}`)
+      return NextResponse.json({ 
+        error: 'Aucune subscription trouvée dans Stripe. Vérifie que tu as bien complété le paiement.',
+        userId: user.id,
+        email: user.email,
+        customerFound: !!customerId
+      }, { status: 404 })
+    }
+
+    // Vérifier si c'est Premium
+    const hasTrialEnd = stripeSubscription.trial_end && stripeSubscription.trial_end > Math.floor(Date.now() / 1000)
+    const planTypeFromMetadata = stripeSubscription.metadata?.plan_type
+    const isUpgradeFromMetadata = stripeSubscription.metadata?.is_upgrade === 'true'
+    
+    // C'est Premium si :
+    // 1. C'est un upgrade explicite (is_upgrade === 'true')
+    // 2. OU plan_type === 'direct' dans les metadata
+    // 3. OU status === 'active' ET pas de trial_end
+    const isPremium = isUpgradeFromMetadata || 
+                     planTypeFromMetadata === 'direct' ||
+                     (!hasTrialEnd && stripeSubscription.status === 'active' && planTypeFromMetadata !== 'trial')
+
+    console.log(`[sync-subscription] User: ${user.id}, Status: ${stripeSubscription.status}, Trial end: ${stripeSubscription.trial_end}`)
+    console.log(`[sync-subscription] Metadata - plan_type: ${planTypeFromMetadata}, is_upgrade: ${isUpgradeFromMetadata}`)
+    console.log(`[sync-subscription] Is Premium: ${isPremium}`)
 
     // Créer ou mettre à jour la subscription dans la DB
     const subscriptionData = {

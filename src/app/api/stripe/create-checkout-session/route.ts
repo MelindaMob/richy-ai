@@ -12,16 +12,63 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     
-    // Auth check
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-    }
-
     const { 
       priceType, // 'trial' ou 'direct'
-      isUpgrade = false // Si c'est un upgrade depuis trial
+      isUpgrade = false, // Si c'est un upgrade depuis trial
+      pendingRegistration // Infos d'inscription si le compte n'existe pas encore
     } = await req.json()
+
+    let user
+    
+    // Si pendingRegistration existe, créer le compte Supabase d'abord
+    if (pendingRegistration) {
+      console.log('[create-checkout-session] Création du compte Supabase avant checkout')
+      
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email: pendingRegistration.email,
+        password: pendingRegistration.password,
+        options: {
+          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/payment-success`,
+          data: {
+            full_name: pendingRegistration.full_name,
+            company_name: pendingRegistration.company_name
+          }
+        }
+      })
+
+      if (signUpError) {
+        console.error('[create-checkout-session] Erreur création compte:', signUpError)
+        return NextResponse.json({ error: 'Erreur lors de la création du compte' }, { status: 400 })
+      }
+
+      if (!signUpData.user) {
+        return NextResponse.json({ error: 'Impossible de créer le compte' }, { status: 400 })
+      }
+
+      user = signUpData.user
+
+      // Mettre à jour le profil avec les infos supplémentaires
+      await supabase
+        .from('profiles')
+        .update({
+          full_name: pendingRegistration.full_name,
+          company_name: pendingRegistration.company_name,
+          phone_number: pendingRegistration.phone_number
+        })
+        .eq('id', user.id)
+
+      console.log('[create-checkout-session] Compte créé avec succès:', user.id)
+      
+      // Note: Le sessionStorage sera nettoyé côté client après le checkout réussi
+      // On retourne un flag pour indiquer que le compte vient d'être créé
+    } else {
+      // Auth check pour utilisateur existant
+      const { data: { user: existingUser } } = await supabase.auth.getUser()
+      if (!existingUser) {
+        return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+      }
+      user = existingUser
+    }
 
     // Check si déjà abonné
     const { data: existingSub } = await supabase
@@ -38,32 +85,73 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Créer ou récupérer le customer
+    // Créer ou récupérer le customer Stripe
+    // IMPORTANT: Le customer Stripe sera créé ici, pas avant
     let customerId = existingSub?.stripe_customer_id
+    let customerExists = false
     
     if (!customerId) {
+      // Pas de customer ID en base, créer un nouveau customer Stripe
+      // C'est ici que le client Stripe est créé, en même temps que le checkout
+      console.log('[create-checkout-session] Création du client Stripe pour user:', user.id)
+      
       const customer = await stripe.customers.create({
         email: user.email!,
         metadata: {
           user_id: user.id
         },
-        balance: 0 // Set initial balance to 0
+        balance: 0
       })
       customerId = customer.id
+      customerExists = true
       
-      // Sauvegarder le customer ID
+      console.log('[create-checkout-session] Client Stripe créé:', customerId)
+      
+      // Sauvegarder le customer ID (mais pas de subscription encore, elle sera créée par le webhook)
       await supabase.from('subscriptions').upsert({
         user_id: user.id,
         stripe_customer_id: customerId,
         status: 'pending'
+      }, {
+        onConflict: 'user_id'
       })
     } else {
-      // Si le customer existe déjà, vérifier et réinitialiser sa balance si nécessaire
-      const customer = await stripe.customers.retrieve(customerId)
-      if (customer && !customer.deleted && (customer as any).balance !== 0) {
-        // Réinitialiser la balance à 0 pour éviter les crédits appliqués
-        await stripe.customers.update(customerId, {
+      // Vérifier si le customer existe réellement dans Stripe
+      try {
+        const customer = await stripe.customers.retrieve(customerId)
+        
+        // Vérifier si le customer n'a pas été supprimé
+        if (customer.deleted) {
+          throw new Error('Customer deleted')
+        }
+        
+        customerExists = true
+        
+        // Réinitialiser la balance à 0 si nécessaire
+        if ((customer as any).balance !== 0) {
+          await stripe.customers.update(customerId, {
+            balance: 0
+          })
+        }
+      } catch (error: any) {
+        // Si le customer n'existe pas dans Stripe (404 ou deleted), créer un nouveau
+        console.log(`[create-checkout-session] Customer ${customerId} not found in Stripe, creating new one`)
+        
+        const customer = await stripe.customers.create({
+          email: user.email!,
+          metadata: {
+            user_id: user.id
+          },
           balance: 0
+        })
+        customerId = customer.id
+        customerExists = true
+        
+        // Mettre à jour la base de données avec le nouveau customer ID
+        await supabase.from('subscriptions').upsert({
+          user_id: user.id,
+          stripe_customer_id: customerId,
+          status: existingSub?.status || 'pending'
         })
       }
     }

@@ -50,10 +50,15 @@ export default function Home() {
             <span className="text-richy-gold">Que du concret.</span>
           </p>
 
-          <div className="flex items-center justify-center">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/register">
-              <button className="px-8 py-4 bg-richy-gold text-richy-black rounded-lg hover:bg-richy-gold-light transition-all font-bold text-lg shadow-lg shadow-richy-gold/20">
-                Commencer Gratuitement
+              <button className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black rounded-lg hover:scale-105 transition-all font-bold text-lg shadow-lg shadow-richy-gold/20 border-2 border-richy-gold/50">
+                Essai Gratuit 3 jours
+              </button>
+            </Link>
+            <Link href="/register">
+              <button className="w-full sm:w-auto px-8 py-4 bg-richy-black-soft border-2 border-richy-gold text-richy-gold rounded-lg hover:bg-richy-gold/10 hover:scale-105 transition-all font-bold text-lg shadow-lg">
+                Accès Premium Immédiat
               </button>
             </Link>
           </div>

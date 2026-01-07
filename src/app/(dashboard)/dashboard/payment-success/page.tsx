@@ -11,6 +11,9 @@ export default function PaymentSuccessPage() {
   const [syncing, setSyncing] = useState(true)
 
   useEffect(() => {
+    // Nettoyer le sessionStorage si des infos d'inscription étaient en attente
+    sessionStorage.removeItem('pending_registration')
+    
     // Synchroniser la subscription avec Stripe
     const syncSubscription = async () => {
       try {
@@ -47,12 +50,6 @@ export default function PaymentSuccessPage() {
         <p className="text-gray-400 mb-6">
           {syncing ? 'Synchronisation de votre abonnement...' : 'Ton abonnement est maintenant actif. Redirection vers le dashboard...'}
         </p>
-
-        {sessionId && (
-          <p className="text-xs text-gray-500 mb-4">
-            Session ID: {sessionId.substring(0, 20)}...
-          </p>
-        )}
 
         <Link 
           href="/dashboard"

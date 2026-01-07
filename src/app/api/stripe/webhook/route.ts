@@ -237,20 +237,40 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription
         
         const userId = subscription.metadata?.user_id
-        const isUpgrade = subscription.metadata?.is_upgrade === 'true' || 
-                         (!subscription.trial_end && subscription.status === 'active')
+        const planType = subscription.metadata?.plan_type
+        const isUpgrade = subscription.metadata?.is_upgrade === 'true'
+        const hasTrialEnd = subscription.trial_end && subscription.trial_end > Math.floor(Date.now() / 1000)
         
-        const subscriptionData = {
+        // C'est un upgrade si :
+        // 1. is_upgrade === 'true' dans les metadata
+        // 2. OU plan_type === 'direct' ET pas de trial_end
+        const isPremium = isUpgrade || (planType === 'direct' && !hasTrialEnd)
+        
+        console.log(`[webhook] subscription.updated - userId: ${userId}, planType: ${planType}, isUpgrade: ${isUpgrade}, isPremium: ${isPremium}, status: ${subscription.status}`)
+        
+        const subscriptionData: any = {
           status: subscription.status,
           current_period_end: (subscription as any).current_period_end
             ? new Date((subscription as any).current_period_end * 1000).toISOString()
             : null,
-          // Si upgrade, enlever les limitations et mettre plan_type à 'direct'
-          ...(isUpgrade && {
-            plan_type: 'direct',
-            trial_limitations: null,
-            trial_ends_at: null
-          })
+        }
+        
+        // Si upgrade/Premium, enlever les limitations et mettre plan_type à 'direct'
+        if (isPremium) {
+          subscriptionData.plan_type = 'direct'
+          subscriptionData.trial_limitations = null
+          subscriptionData.trial_ends_at = null
+        } else if (planType === 'trial') {
+          subscriptionData.plan_type = 'trial'
+          subscriptionData.trial_limitations = {
+            chat_messages: 5,
+            validator_uses: 1,
+            prompt_uses: 0,
+            builder_uses: 0
+          }
+          subscriptionData.trial_ends_at = subscription.trial_end 
+            ? new Date(subscription.trial_end * 1000).toISOString() 
+            : null
         }
 
         const { error: updateError } = await supabase.from('subscriptions')
@@ -263,7 +283,7 @@ export async function POST(req: NextRequest) {
         }
         
         // Mettre à jour aussi la table profiles si upgrade
-        const profileUpdatePromise = (isUpgrade && userId) ? supabase.from('profiles')
+        const profileUpdatePromise = (isPremium && userId) ? supabase.from('profiles')
           .update({
             subscription_status: 'premium',
             trial_ends_at: null

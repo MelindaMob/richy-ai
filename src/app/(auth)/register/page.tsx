@@ -15,16 +15,66 @@ export default function RegisterPage() {
     phone_number: '+33'
   })
   const [error, setError] = useState<string | null>(null)
+  const [phoneError, setPhoneError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'register' | 'phone-verify'>('register')
   const [phoneVerified, setPhoneVerified] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
+  // Validation du numéro de téléphone
+  const validatePhoneNumber = (phone: string): { valid: boolean; error: string | null } => {
+    // Enlever tous les espaces et caractères non numériques sauf +33
+    const cleaned = phone.replace(/\s/g, '').replace(/[^\d+]/g, '')
+    
+    // Vérifier qu'il commence par +33
+    if (!cleaned.startsWith('+33')) {
+      return { valid: false, error: 'Le numéro doit commencer par +33' }
+    }
+    
+    // Extraire les chiffres après +33
+    const digits = cleaned.substring(3)
+    
+    // Vérifier qu'il n'y a que des chiffres
+    if (!/^\d+$/.test(digits)) {
+      return { valid: false, error: 'Le numéro ne doit contenir que des chiffres' }
+    }
+    
+    // Vérifier la longueur (9 chiffres après +33 pour un numéro mobile français)
+    if (digits.length < 9) {
+      return { valid: false, error: `Il manque ${9 - digits.length} chiffre(s)` }
+    }
+    
+    if (digits.length > 9) {
+      return { valid: false, error: 'Le numéro contient trop de chiffres' }
+    }
+    
+    // Vérifier que ça commence par 6 ou 7 (pas 0 ou 1)
+    const firstDigit = digits.substring(0, 1)
+    if (firstDigit === '0' || firstDigit === '1') {
+      return { valid: false, error: 'Les numéros commençant par 0 ou 1 ne sont pas acceptés. Utilisez +336 ou +337' }
+    }
+    
+    if (firstDigit !== '6' && firstDigit !== '7') {
+      return { valid: false, error: 'Le numéro doit commencer par +336 ou +337' }
+    }
+    
+    return { valid: true, error: null }
+  }
+
   const handleRegister = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault()
     }
+    
+    // Valider le numéro de téléphone avant de continuer
+    const phoneValidation = validatePhoneNumber(formData.phone_number)
+    if (!phoneValidation.valid) {
+      setPhoneError(phoneValidation.error)
+      return
+    }
+    
+    setPhoneError(null)
     
     // Si pas encore vérifié le téléphone, passer à l'étape de vérification
     if (step === 'register' && formData.phone_number && !phoneVerified) {
@@ -32,59 +82,10 @@ export default function RegisterPage() {
       return
     }
     
-    setError(null)
-    setLoading(true)
-
-    try {
-      // 1. Créer le compte
-      const { data, error } = await supabase.auth.signUp({
-        email: formData.email.trim().toLowerCase(), // Nettoyer l'email
-        password: formData.password,
-        options: {
-          // Ne pas rediriger vers dashboard - l'utilisateur doit choisir son plan
-          emailRedirectTo: `${window.location.origin}/register/pricing-choice`,
-          data: {
-            full_name: formData.full_name,
-            company_name: formData.company_name
-          }
-        }
-      })
-
-      if (error) throw error
-
-      if (data.user) {
-        // 2. Update le profil avec les infos supplémentaires
-        await supabase
-          .from('profiles')
-          .update({
-            full_name: formData.full_name,
-            company_name: formData.company_name,
-            phone_number: formData.phone_number
-          })
-          .eq('id', data.user.id)
-
-        // 3. MODE DEV : Skip Stripe pour l'instant
-        if (process.env.NEXT_PUBLIC_SKIP_STRIPE === 'true') {
-          // En dev, on simule un customer Stripe
-          await supabase
-            .from('profiles')
-            .update({
-              stripe_customer_id: 'cus_dev_' + data.user.id.substring(0, 8),
-              subscription_status: 'trialing'
-            })
-            .eq('id', data.user.id)
-          
-          router.push('/dashboard')
-        } else {
-          // En production : choix du plan
-          router.push('/register/pricing-choice')
-        }
-      }
-    } catch (error: any) {
-      setError(error.message || 'Erreur lors de l\'inscription')
-    } finally {
-      setLoading(false)
-    }
+    // Si on arrive ici, c'est qu'on a déjà vérifié le téléphone
+    // Dans ce cas, on devrait déjà avoir été redirigé vers pricing-choice
+    // Cette fonction ne devrait normalement pas être appelée après vérification
+    setError('Veuillez vérifier votre numéro de téléphone d\'abord')
   }
 
   return (
@@ -204,33 +205,47 @@ export default function RegisterPage() {
                 value={formData.phone_number}
                 onChange={(e) => {
                   let value = e.target.value
+                  // Enlever tous les espaces
+                  value = value.replace(/\s/g, '')
+                  
                   // Forcer +33 au début
                   if (!value.startsWith('+33')) {
-                    value = '+33' + value.replace(/^\+33/, '')
+                    value = '+33' + value.replace(/^\+33/, '').replace(/[^\d]/g, '')
+                  } else {
+                    // Garder seulement +33 et les chiffres après
+                    value = '+33' + value.substring(3).replace(/[^\d]/g, '')
                   }
-                  // Limiter à 17 caractères max
-                  if (value.length <= 17) {
+                  
+                  // Limiter à 13 caractères (+33 + 10 chiffres)
+                  if (value.length <= 13) {
                     setFormData({...formData, phone_number: value})
+                    setPhoneError(null) // Réinitialiser l'erreur quand l'utilisateur tape
                   }
                 }}
                 onBlur={(e) => {
-                  // Formater automatiquement avec espaces
-                  let value = e.target.value.replace(/\s/g, '')
-                  if (value.startsWith('+33') && value.length > 3) {
-                    const number = value.substring(3)
-                    if (number.length >= 1) {
-                      const formatted = '+33 ' + number.match(/.{1,2}/g)?.join(' ') || number
-                      setFormData({...formData, phone_number: formatted})
-                    }
+                  // Valider le numéro au blur
+                  const validation = validatePhoneNumber(formData.phone_number)
+                  if (!validation.valid) {
+                    setPhoneError(validation.error)
+                  } else {
+                    setPhoneError(null)
                   }
                 }}
-                className="w-full px-4 py-3 bg-richy-black border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-richy-gold transition-colors"
-                placeholder="+33 6 12 34 56 78"
+                className={`w-full px-4 py-3 bg-richy-black border rounded-lg text-white placeholder-gray-500 focus:outline-none transition-colors ${
+                  phoneError ? 'border-red-500' : 'border-gray-700 focus:border-richy-gold'
+                }`}
+                placeholder="+33612345678"
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Format: +33 6 12 34 56 78 (numéro français uniquement)
-              </p>
+              {phoneError ? (
+                <p className="text-xs text-red-400 mt-1">
+                  {phoneError}
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 mt-1">
+                  Format: +33612345678 (+336 ou +337 uniquement, 9 chiffres après +33)
+                </p>
+              )}
             </div>
 
             {error && (
@@ -241,8 +256,8 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-3 px-6 rounded-lg hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:hover:scale-100"
+              disabled={loading || !!phoneError || !validatePhoneNumber(formData.phone_number).valid}
+              className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-3 px-6 rounded-lg hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
             >
               {loading ? 'Création...' : 'Suivant →'}
             </button>
@@ -260,85 +275,31 @@ export default function RegisterPage() {
                 initialPhone={formData.phone_number}
                 onVerified={async () => {
                   setPhoneVerified(true)
-                  // Continuer avec l'inscription après vérification
-                  setLoading(true)
+                  
+                  // IMPORTANT: Ne PAS créer le compte ici
+                  // Stocker les infos d'inscription dans sessionStorage
+                  // Le compte sera créé uniquement après le choix du plan et le checkout Stripe
                   try {
-                    const { data, error } = await supabase.auth.signUp({
+                    const registrationData = {
                       email: formData.email.trim().toLowerCase(),
                       password: formData.password,
-                      options: {
-                        // Ne pas rediriger vers dashboard - l'utilisateur doit choisir son plan
-                        emailRedirectTo: `${window.location.origin}/register/pricing-choice`,
-                        data: {
-                          full_name: formData.full_name,
-                          company_name: formData.company_name
-                        }
-                      }
-                    })
-
-                    if (error) throw error
-
-                    if (data.user) {
-                      // Mettre à jour le profil avec les infos
-                      await supabase
-                        .from('profiles')
-                        .update({
-                          full_name: formData.full_name,
-                          company_name: formData.company_name,
-                          phone_number: formData.phone_number
-                        })
-                        .eq('id', data.user.id)
-
-                      // IMPORTANT: Ne PAS créer de subscription ici
-                      // L'utilisateur DOIT choisir son plan sur pricing-choice
-                      // C'est cette page qui créera la subscription via Stripe
-                      
-                      // IMPORTANT: Ne JAMAIS créer de subscription ici
-                      // L'utilisateur DOIT choisir son plan sur pricing-choice
-                      // Aucune subscription dans la table subscriptions ne doit exister
-                      
-                      if (process.env.NEXT_PUBLIC_SKIP_STRIPE === 'true') {
-                        // Mode dev uniquement - créer une subscription trial pour les tests
-                        await supabase
-                          .from('subscriptions')
-                          .insert({
-                            user_id: data.user.id,
-                            stripe_customer_id: 'cus_dev_' + data.user.id.substring(0, 8),
-                            status: 'trialing',
-                            plan_type: 'trial',
-                            trial_limitations: {
-                              chat_messages: 5,
-                              validator_uses: 1,
-                              prompt_uses: 0,
-                              builder_uses: 0
-                            },
-                            trial_ends_at: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
-                          })
-                        
-                        await supabase
-                          .from('profiles')
-                          .update({
-                            stripe_customer_id: 'cus_dev_' + data.user.id.substring(0, 8),
-                            subscription_status: 'trialing'
-                          })
-                          .eq('id', data.user.id)
-                        
-                        router.push('/dashboard')
-                      } else {
-                        // PRODUCTION: Rediriger OBLIGATOIREMENT vers le choix de plan
-                        // AUCUNE subscription créée - l'utilisateur DOIT choisir son plan
-                        // Utiliser window.location.href pour forcer la redirection (pas router.push)
-                        console.log('[register] Redirection vers pricing-choice - aucune subscription créée')
-                        setTimeout(() => {
-                          window.location.href = '/register/pricing-choice'
-                        }, 500)
-                      }
+                      full_name: formData.full_name,
+                      company_name: formData.company_name,
+                      phone_number: formData.phone_number,
+                      phone_verified: true
                     }
+                    
+                    // Stocker dans sessionStorage pour la page pricing-choice
+                    sessionStorage.setItem('pending_registration', JSON.stringify(registrationData))
+                    
+                    console.log('[register] Infos d\'inscription stockées, redirection vers pricing-choice')
+                    
+                    // Rediriger vers la page de choix de plan
+                    // Le compte sera créé lors du checkout Stripe
+                    window.location.href = '/register/pricing-choice'
                   } catch (err: any) {
-                    setError(err.message || 'Erreur lors de l\'inscription')
+                    setError(err.message || 'Erreur lors de la préparation de l\'inscription')
                     setStep('register')
-                  } finally {
-                    setLoading(false)
                   }
                 }}
               />

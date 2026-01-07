@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import UpgradeModal from '@/components/UpgradeModal'
+import { DashboardHeader } from '../dashboard/dashboard-header'
 
 export default function PromptPage() {
   const [title, setTitle] = useState('')
@@ -13,7 +14,103 @@ export default function PromptPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [headerData, setHeaderData] = useState<{
+    trialDaysLeft: number
+    userEmail: string
+    subscriptionStatus: string
+    hasTrialLimitations: boolean
+  } | null>(null)
   const supabase = createClient()
+
+  // Récupérer les données pour le header
+  useEffect(() => {
+    const fetchHeaderData = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError) {
+          console.error('Error getting user:', userError)
+          // Si erreur de réseau, ne pas bloquer l'interface
+          if (userError.message?.includes('Failed to fetch')) {
+            return
+          }
+        }
+        
+        if (!user) return
+
+        // Récupérer le profil
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        if (profileError && !profileError.message?.includes('Failed to fetch')) {
+          console.error('Error fetching profile:', profileError)
+        }
+
+        // Récupérer la subscription
+        const { data: subscription, error: subscriptionError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (subscriptionError && !subscriptionError.message?.includes('Failed to fetch')) {
+          console.error('Error fetching subscription:', subscriptionError)
+        }
+
+        // Calculer les jours restants d'essai
+        let trialDaysLeft = 0
+        let subscriptionStatus = subscription?.status || 'pending'
+        let hasTrialLimitations = !!subscription?.trial_limitations
+        
+        const isTrialPlan = subscription?.plan_type === 'trial'
+        const isCurrentlyTrial = subscription?.trial_ends_at && new Date(subscription.trial_ends_at) > new Date()
+        
+        if (isTrialPlan) {
+          hasTrialLimitations = true
+          if (subscription?.trial_ends_at) {
+            const trialEnd = new Date(subscription.trial_ends_at)
+            const now = new Date()
+            trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          } else if (subscription?.created_at) {
+            const createdAt = new Date(subscription.created_at)
+            const trialEnd = new Date(createdAt)
+            trialEnd.setDate(trialEnd.getDate() + 3)
+            const now = new Date()
+            trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          } else {
+            trialDaysLeft = 3
+          }
+          if (subscriptionStatus !== 'trialing') {
+            subscriptionStatus = 'trialing'
+          }
+        } else if (isCurrentlyTrial) {
+          hasTrialLimitations = true
+          const trialEnd = new Date(subscription.trial_ends_at)
+          const now = new Date()
+          trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        }
+
+        setHeaderData({
+          trialDaysLeft,
+          userEmail: profile?.email || user.email || '',
+          subscriptionStatus,
+          hasTrialLimitations
+        })
+      } catch (error: any) {
+        // Ne pas bloquer l'interface en cas d'erreur réseau
+        if (error?.message?.includes('Failed to fetch') || error instanceof TypeError) {
+          console.warn('Network error fetching header data (non-blocking):', error)
+          return
+        }
+        console.error('Error fetching header data:', error)
+      }
+    }
+
+    fetchHeaderData()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -54,12 +151,19 @@ export default function PromptPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft p-8">
-      <div className="max-w-4xl mx-auto">
-        <Link href="/dashboard" className="text-richy-gold hover:text-richy-gold-light mb-6 inline-block">
-          ← Retour au dashboard
-        </Link>
+    <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft">
+      {/* Header */}
+      {headerData && (
+        <DashboardHeader 
+          trialDaysLeft={headerData.trialDaysLeft}
+          userEmail={headerData.userEmail}
+          subscriptionStatus={headerData.subscriptionStatus}
+          hasTrialLimitations={headerData.hasTrialLimitations}
+        />
+      )}
 
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-12 max-w-4xl">
         <h1 className="text-4xl font-bold text-richy-gold mb-8">
           ✨ Richy.prompt
         </h1>
@@ -131,7 +235,7 @@ export default function PromptPage() {
             </button>
           </div>
         )}
-      </div>
+      </main>
 
       {showUpgradeModal && (
         <UpgradeModal
