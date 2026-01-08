@@ -48,7 +48,19 @@ function PricingChoiceContent() {
 
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser()
+      
+      console.log('[pricing-choice] checkAuth - user:', user ? `présent (${user.email})` : 'absent')
+      console.log('[pricing-choice] checkAuth - pendingDataStr:', pendingDataStr ? 'présent' : 'absent')
+      
+      // Si on a des données pending_registration, c'est une nouvelle inscription
+      // On ne doit PAS rediriger même si un utilisateur est connecté (c'est peut-être un autre compte)
+      if (pendingDataStr) {
+        console.log('[pricing-choice] Données pending_registration présentes, on reste sur la page pricing')
+        return
+      }
+      
       if (!user && !pendingDataStr) {
+        console.log('[pricing-choice] Pas d\'utilisateur ni de pending_registration, redirection vers /register')
         router.push('/register')
         return
       }
@@ -60,7 +72,11 @@ function PricingChoiceContent() {
           .eq('user_id', user.id)
           .maybeSingle()
 
-        if (subscription && (subscription.status === 'active' || subscription.status === 'trialing')) {
+        console.log('[pricing-choice] Subscription pour user:', subscription ? `présente (${subscription.status})` : 'absente')
+        
+        // Seulement rediriger si on a une subscription active ET qu'on n'est pas en train de faire une nouvelle inscription
+        if (subscription && (subscription.status === 'active' || subscription.status === 'trialing') && !pendingDataStr) {
+          console.log('[pricing-choice] Subscription active, redirection vers /dashboard')
           router.push('/dashboard')
           return
         }
@@ -70,8 +86,11 @@ function PricingChoiceContent() {
   }, [router, supabase, searchParams])
 
   const handleSelectPlan = (plan: 'trial' | 'direct') => {
+    console.log('[pricing-choice] handleSelectPlan appelé:', plan)
+    console.log('[pricing-choice] pendingRegistration:', pendingRegistration)
     setSelectedPlan(plan)
     setShowCheckout(true)
+    console.log('[pricing-choice] showCheckout mis à true')
   }
 
   // Carousel handlers

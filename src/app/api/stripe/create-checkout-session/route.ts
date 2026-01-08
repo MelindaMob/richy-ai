@@ -150,9 +150,18 @@ export async function POST(req: NextRequest) {
       }
 
       // Chiffrer le mot de passe (ou fallback clair)
-      const { encrypted, usedFallback } = encryptPassword(password)
+      const { encrypted: encryptedPassword, usedFallback } = encryptPassword(password)
       if (usedFallback) {
         console.warn('[create-checkout-session] Password stocké en clair temporairement (clé manquante)')
+      }
+
+      // S'assurer que encrypted n'est jamais null/undefined
+      const encrypted = encryptedPassword || password
+      if (!encrypted) {
+        console.error('[create-checkout-session] ❌ encrypted est null/undefined après fallback')
+        return NextResponse.json({
+          error: 'Erreur lors du traitement du mot de passe. Réessaie.'
+        }, { status: 500 })
       }
 
       // Créer un token de registration et insérer dans pending_registrations
@@ -160,19 +169,29 @@ export async function POST(req: NextRequest) {
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
       console.log('[create-checkout-session] 🚀 Tentative d\'insertion dans pending_registrations')
+      console.log('[create-checkout-session] password_hash à insérer:', encrypted ? 'présent (' + encrypted.length + ' chars)' : 'VIDE')
+      
+      // Préparer les données d'insertion
+      const insertData: any = {
+        token: registrationToken,
+        email,
+        full_name: registration.full_name || null,
+        company_name: registration.company_name || null,
+        phone_number: phoneNumber,
+        phone_verification_id: phoneVerificationId,
+        plan_type: finalPriceType || 'trial',
+        expires_at: expiresAt
+      }
+      
+      // Essayer d'abord avec password_hash (nouveau nom)
+      // Si ça échoue, on essaiera avec password_encrypted (ancien nom)
+      insertData.password_hash = encrypted
+      // Aussi remplir password_encrypted au cas où les deux colonnes existent
+      insertData.password_encrypted = encrypted
+      
       const { error: pendingError, data: pendingData } = await supabase
         .from('pending_registrations')
-        .insert({
-          token: registrationToken,
-          email,
-          password_encrypted: encrypted,
-          full_name: registration.full_name || null,
-          company_name: registration.company_name || null,
-          phone_number: phoneNumber,
-          phone_verification_id: phoneVerificationId,
-          plan_type: finalPriceType || 'trial',
-          expires_at: expiresAt
-        })
+        .insert(insertData)
         .select()
 
       if (pendingError) {
@@ -241,12 +260,32 @@ export async function POST(req: NextRequest) {
         .single()
       existingSub = existingSubData
 
-      // Si upgrade, annuler l'ancien
+      // Si upgrade, annuler l'ancien (si elle existe encore dans Stripe)
       if (isUpgrade && existingSub?.stripe_subscription_id) {
-        await stripe.subscriptions.cancel(existingSub.stripe_subscription_id, {
-          prorate: false,
-          invoice_now: false
-        })
+        try {
+          // Vérifier d'abord si la subscription existe encore dans Stripe
+          const stripeSub = await stripe.subscriptions.retrieve(existingSub.stripe_subscription_id)
+          
+          // Si elle existe et n'est pas déjà annulée, l'annuler
+          if (stripeSub && stripeSub.status !== 'canceled' && !stripeSub.canceled_at) {
+            console.log('[create-checkout-session] Annulation de l\'ancienne subscription:', existingSub.stripe_subscription_id)
+            await stripe.subscriptions.cancel(existingSub.stripe_subscription_id, {
+              prorate: false,
+              invoice_now: false
+            })
+            console.log('[create-checkout-session] ✅ Ancienne subscription annulée')
+          } else {
+            console.log('[create-checkout-session] ⚠️ Ancienne subscription déjà annulée ou inexistante, on continue')
+          }
+        } catch (cancelError: any) {
+          // Si la subscription n'existe plus dans Stripe (404), c'est OK, on continue
+          if (cancelError?.code === 'resource_missing' || cancelError?.statusCode === 404) {
+            console.log('[create-checkout-session] ⚠️ Ancienne subscription n\'existe plus dans Stripe, on continue:', existingSub.stripe_subscription_id)
+          } else {
+            console.error('[create-checkout-session] ❌ Erreur lors de l\'annulation de l\'ancienne subscription:', cancelError)
+            // Ne pas bloquer, on continue quand même
+          }
+        }
       }
 
       // Créer ou récupérer le customer Stripe

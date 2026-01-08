@@ -46,7 +46,9 @@ export default function CheckoutModal({
   }, [stripe])
 
   useEffect(() => {
+    console.log('[CheckoutModal] useEffect - isOpen:', isOpen, 'hasFetchedSecret:', hasFetchedSecret.current, 'clientSecret:', !!clientSecret)
     if (isOpen && !hasFetchedSecret.current && !clientSecret) {
+      console.log('[CheckoutModal] Modal ouvert, appel de fetchCheckoutSession')
       fetchCheckoutSession()
     }
     
@@ -59,7 +61,21 @@ export default function CheckoutModal({
   }, [isOpen])
 
   const fetchCheckoutSession = async () => {
-    if (hasFetchedSecret.current) return
+    if (hasFetchedSecret.current) {
+      console.log('[CheckoutModal] fetchCheckoutSession déjà appelé, skip')
+      return
+    }
+    
+    console.log('[CheckoutModal] 🚀 fetchCheckoutSession appelé')
+    console.log('[CheckoutModal] Données envoyées:', {
+      priceType: planType,
+      isUpgrade: isUpgrade,
+      pendingRegistration: pendingRegistration ? {
+        email: pendingRegistration.email,
+        phone: pendingRegistration.phone_number,
+        verificationId: pendingRegistration.phone_verification_id
+      } : null
+    })
     
     setLoading(true)
     setError(null)
@@ -76,19 +92,31 @@ export default function CheckoutModal({
         })
       })
       
+      console.log('[CheckoutModal] Réponse API:', {
+        status: res.status,
+        ok: res.ok
+      })
+      
       if (!res.ok) {
         // Lire le message d'erreur du serveur
         const errorData = await res.json().catch(() => ({ error: 'Erreur inconnue' }))
+        console.error('[CheckoutModal] ❌ Erreur API:', errorData)
         throw new Error(errorData.error || `Erreur ${res.status}: ${res.statusText}`)
       }
       
       const data = await res.json()
+      console.log('[CheckoutModal] ✅ Données reçues:', {
+        hasClientSecret: !!data.clientSecret,
+        error: data.error
+      })
       
       if (!data.clientSecret) {
+        console.error('[CheckoutModal] ❌ Aucun clientSecret reçu')
         throw new Error('Aucun clientSecret reçu')
       }
       
       setClientSecret(data.clientSecret)
+      console.log('[CheckoutModal] ✅ clientSecret défini')
     } catch (error: any) {
       console.error('Error fetching checkout session:', error)
       setError(error.message || 'Erreur de chargement')

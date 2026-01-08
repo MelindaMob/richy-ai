@@ -105,7 +105,13 @@ export async function POST(req: NextRequest) {
                 console.warn('[webhook] pending_registration expiré, abandon de la création de compte')
               } else {
                 // Déchiffrer le mot de passe
-                const decryptedPassword = decryptPassword(pendingReg.password_encrypted || pendingReg.password)
+                // La colonne s'appelle password_hash dans la table
+                const passwordToDecrypt = pendingReg.password_hash || pendingReg.password_encrypted || pendingReg.password
+                if (!passwordToDecrypt) {
+                  console.error('[webhook] ❌ Aucun password trouvé dans pending_registration')
+                  throw new Error('Password manquant dans pending_registration')
+                }
+                const decryptedPassword = decryptPassword(passwordToDecrypt)
 
                 const { data: createdUser, error: createUserError } = await supabase.auth.admin.createUser({
                   email: pendingReg.email,
@@ -119,15 +125,15 @@ export async function POST(req: NextRequest) {
                   userId = createdUser.user.id
                   console.log('[webhook] Utilisateur créé via pending_registrations:', userId)
 
-                  // Créer le profil
+                  // Créer le profil (sans phone_number car cette colonne n'existe pas dans profiles)
                   const { error: profileError } = await supabase
                     .from('profiles')
                     .insert({
                       id: userId,
                       email: pendingReg.email,
                       full_name: pendingReg.full_name || null,
-                      company_name: pendingReg.company_name || null,
-                      phone_number: pendingReg.phone_number
+                      company_name: pendingReg.company_name || null
+                      // Note: phone_number n'existe pas dans la table profiles
                     })
                   if (profileError) {
                     console.warn('[webhook] Erreur insertion profil:', profileError)
@@ -135,13 +141,19 @@ export async function POST(req: NextRequest) {
 
                   // Marquer account_created dans phone_verifications
                   if (pendingReg.phone_verification_id) {
-                    const { error: phoneUpdateError } = await supabase
+                    console.log('[webhook] 🚀 Mise à jour phone_verifications.account_created pour:', pendingReg.phone_verification_id)
+                    const { data: updateData, error: phoneUpdateError } = await supabase
                       .from('phone_verifications')
                       .update({ account_created: true })
                       .eq('id', pendingReg.phone_verification_id)
+                      .select()
                     if (phoneUpdateError) {
-                      console.warn('[webhook] Erreur update phone_verifications.account_created:', phoneUpdateError)
+                      console.error('[webhook] ❌ Erreur update phone_verifications.account_created:', phoneUpdateError)
+                    } else {
+                      console.log('[webhook] ✅ phone_verifications.account_created mis à jour:', updateData)
                     }
+                  } else {
+                    console.warn('[webhook] ⚠️ Aucun phone_verification_id dans pending_registration')
                   }
 
                   // Nettoyer l'entrée temporaire

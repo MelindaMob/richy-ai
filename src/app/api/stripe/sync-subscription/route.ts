@@ -168,6 +168,12 @@ export async function POST(req: NextRequest) {
     console.log(`[sync-subscription] Metadata - plan_type: ${planTypeFromMetadata}, is_upgrade: ${isUpgradeFromMetadata}`)
     console.log(`[sync-subscription] Is Premium: ${isPremium}`)
 
+    // Déterminer le plan_type depuis les metadata Stripe (priorité absolue)
+    // Si plan_type est 'direct' dans les metadata, c'est premium, même si status est 'trialing'
+    const finalPlanType = planTypeFromMetadata === 'direct' ? 'direct' : (isPremium ? 'direct' : 'trial')
+    
+    console.log(`[sync-subscription] Plan type final: ${finalPlanType} (metadata: ${planTypeFromMetadata}, isPremium: ${isPremium})`)
+
     // Créer ou mettre à jour la subscription dans la DB
     const subscriptionData = {
       user_id: user.id,
@@ -177,16 +183,16 @@ export async function POST(req: NextRequest) {
       stripe_subscription_id: stripeSubscription.id,
       stripe_price_id: stripeSubscription.items.data[0]?.price.id,
       status: stripeSubscription.status,
-      plan_type: isPremium ? 'direct' : 'trial',
-      trial_limitations: isPremium ? null : {
+      plan_type: finalPlanType, // Utiliser le plan_type déterminé
+      trial_limitations: finalPlanType === 'direct' ? null : {
         chat_messages: 5,
         validator_uses: 1,
         prompt_uses: 0,
         builder_uses: 0
       },
-      trial_ends_at: stripeSubscription.trial_end 
+      trial_ends_at: finalPlanType === 'direct' ? null : (stripeSubscription.trial_end 
         ? new Date(stripeSubscription.trial_end * 1000).toISOString() 
-        : null,
+        : null),
       current_period_end: (stripeSubscription as any).current_period_end
         ? new Date((stripeSubscription as any).current_period_end * 1000).toISOString()
         : null

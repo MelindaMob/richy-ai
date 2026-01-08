@@ -2,7 +2,6 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 
 // Composant enfant qui utilise useSearchParams
 function PaymentSuccessContent() {
@@ -15,16 +14,88 @@ function PaymentSuccessContent() {
     // Nettoyer le sessionStorage si des infos d'inscription étaient en attente
     sessionStorage.removeItem('pending_registration')
     
-    // Synchroniser la subscription avec Stripe
-    const syncSubscription = async () => {
+    // Créer le compte depuis la session Stripe si nécessaire, puis synchroniser
+    const createAccountAndSync = async () => {
       try {
+        console.log('[payment-success] 🚀 Début création compte et synchronisation')
+        
+        // 1. D'abord, vérifier si c'est une nouvelle inscription ou un upgrade
+        if (sessionId) {
+          console.log('[payment-success] Vérification du type de paiement pour session:', sessionId)
+          
+          // Récupérer la session Stripe pour vérifier s'il y a un registration_token
+          const sessionCheckResponse = await fetch(`/api/stripe/check-session?session_id=${sessionId}`)
+          const sessionCheck = await sessionCheckResponse.json().catch(() => ({ hasRegistrationToken: false }))
+          
+          // Si c'est une nouvelle inscription (avec registration_token), créer le compte
+          if (sessionCheck.hasRegistrationToken) {
+            console.log('[payment-success] Nouvelle inscription détectée, création du compte')
+            const createAccountResponse = await fetch('/api/stripe/create-account-from-session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionId })
+            })
+            
+            const createAccountData = await createAccountResponse.json()
+            console.log('[payment-success] Réponse create-account-from-session:', createAccountData)
+            
+            if (createAccountData.success) {
+              console.log('[payment-success] ✅ Compte créé ou existe déjà:', createAccountData.userId)
+              
+              // Si un lien magique est fourni, l'utiliser pour connecter automatiquement l'utilisateur
+              if (createAccountData.magicLink) {
+                console.log('[payment-success] Connexion automatique via lien magique')
+                try {
+                  const url = new URL(createAccountData.magicLink)
+                  const token = url.searchParams.get('token_hash') || url.searchParams.get('token')
+                  const type = url.searchParams.get('type')
+                  
+                  if (token && type) {
+                    // Rediriger vers la route callback qui gère la connexion automatique
+                    window.location.href = `/auth/callback?token_hash=${token}&type=${type}&redirect_to=/dashboard`
+                    return
+                  }
+                } catch (e) {
+                  console.error('[payment-success] Erreur parsing lien magique:', e)
+                }
+                
+                // Fallback: rediriger directement vers le lien magique
+                window.location.href = createAccountData.magicLink
+                return
+              }
+              
+              // Si pas de lien magique, rediriger vers login avec l'email pré-rempli
+              console.log('[payment-success] Pas de lien magique, redirection vers login')
+              router.push('/login?email=' + encodeURIComponent(createAccountData.email || ''))
+              return
+            } else if (createAccountData.userExists) {
+              console.log('[payment-success] Utilisateur existe déjà, synchronisation subscription puis redirection')
+              // L'utilisateur existe déjà, on synchronise juste la subscription
+              // Pas besoin de rediriger vers login, on continue avec la synchronisation
+            }
+          } else {
+            console.log('[payment-success] Upgrade détecté, pas de création de compte nécessaire')
+          }
+        }
+        
+        // 2. Synchroniser la subscription avec Stripe (pour nouvelle inscription ET upgrade)
+        console.log('[payment-success] Synchronisation de la subscription')
         const response = await fetch('/api/stripe/sync-subscription', {
           method: 'POST'
         })
         const data = await response.json()
-        console.log('Subscription synced:', data)
+        console.log('[payment-success] Subscription synced:', data)
+        
+        // Si la synchronisation a réussi, rediriger directement vers le dashboard
+        // Pour un upgrade, l'utilisateur est déjà connecté, donc on peut rediriger directement
+        if (data.success || data.subscription) {
+          console.log('[payment-success] ✅ Synchronisation réussie, redirection vers dashboard')
+          // Utiliser window.location.href pour forcer un rechargement complet et mettre à jour la session
+          window.location.href = '/dashboard'
+          return
+        }
       } catch (error) {
-        console.error('Error syncing subscription:', error)
+        console.error('[payment-success] Error:', error)
       } finally {
         setSyncing(false)
         // Rediriger vers le dashboard après 2 secondes
@@ -34,8 +105,8 @@ function PaymentSuccessContent() {
       }
     }
 
-    syncSubscription()
-  }, [router])
+    createAccountAndSync()
+  }, [router, sessionId])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft flex items-center justify-center p-4">
@@ -51,13 +122,6 @@ function PaymentSuccessContent() {
         <p className="text-gray-400 mb-6">
           {syncing ? 'Synchronisation de votre abonnement...' : 'Ton abonnement est maintenant actif. Redirection vers le dashboard...'}
         </p>
-
-        <Link 
-          href="/dashboard"
-          className="btn btn-primary"
-        >
-          Aller au dashboard →
-        </Link>
       </div>
     </div>
   )

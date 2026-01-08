@@ -32,9 +32,22 @@ export async function middleware(request: NextRequest) {
         .eq('user_id', user.id)
         .maybeSingle()
       
-      // Si pas de subscription, rediriger vers pricing
+      // Si pas de subscription, vérifier si un paiement vient d'être fait (webhook en cours)
+      // Dans ce cas, on laisse passer pour permettre la synchronisation
       if (!subscription) {
-        return NextResponse.redirect(new URL('/register/pricing-choice', request.url))
+        // Vérifier si l'utilisateur a un customer Stripe (indique qu'un paiement a été fait)
+        // Si oui, laisser passer pour permettre la synchronisation
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('stripe_customer_id')
+          .eq('id', user.id)
+          .maybeSingle()
+        
+        // Si pas de customer Stripe, rediriger vers pricing
+        if (!profile?.stripe_customer_id) {
+          return NextResponse.redirect(new URL('/register/pricing-choice', request.url))
+        }
+        // Sinon, laisser passer (le webhook va créer la subscription)
       }
       
       // Si status invalide (canceled, past_due), rediriger vers pricing

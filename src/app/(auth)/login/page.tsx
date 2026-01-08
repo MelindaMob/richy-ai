@@ -1,17 +1,27 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 
-export default function LoginPage() {
+function LoginContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const supabase = createClient()
+  
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
-  const supabase = createClient()
+
+  // Pré-remplir l'email depuis l'URL si présent
+  useEffect(() => {
+    const emailParam = searchParams.get('email')
+    if (emailParam) {
+      setEmail(emailParam)
+    }
+  }, [searchParams])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -38,19 +48,43 @@ export default function LoginPage() {
       // Vérifier si l'utilisateur a une subscription active
       const { data: subscription } = await supabase
         .from('subscriptions')
-        .select('status, stripe_subscription_id')
+        .select('status, stripe_subscription_id, plan_type')
         .eq('user_id', data.user.id)
         .maybeSingle()
 
-      // Si pas de subscription ou status invalide, rediriger vers pricing
+      // Si pas de subscription, vérifier si un compte vient d'être créé (webhook en cours)
+      // Dans ce cas, attendre un peu et synchroniser la subscription
+      if (!subscription) {
+        console.log('[login] Aucune subscription trouvée, tentative de synchronisation')
+        try {
+          const syncResponse = await fetch('/api/stripe/sync-subscription', {
+            method: 'POST'
+          })
+          const syncData = await syncResponse.json()
+          console.log('[login] Résultat synchronisation:', syncData)
+          
+          // Si la synchronisation a réussi, rediriger vers dashboard
+          if (syncData.success || syncData.subscription) {
+            router.push('/dashboard')
+            return
+          }
+        } catch (syncError) {
+          console.error('[login] Erreur synchronisation:', syncError)
+        }
+        
+        // Si toujours pas de subscription après sync, rediriger vers pricing
+        router.push('/register/pricing-choice')
+        return
+      }
+
+      // Si subscription existe mais status invalide, rediriger vers pricing
       // MAIS: si stripe_subscription_id existe, c'est qu'un paiement a été fait, on accepte même si status est 'pending'
-      if (!subscription || 
-          subscription.status === 'canceled' || 
+      if (subscription.status === 'canceled' || 
           subscription.status === 'past_due' ||
           (subscription.status === 'pending' && !subscription.stripe_subscription_id)) {
         router.push('/register/pricing-choice')
       } else {
-        // Subscription active → dashboard
+        // Subscription active ou trialing → dashboard
         router.push('/dashboard')
       }
     } catch (error: any) {
@@ -158,5 +192,17 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-richy-black via-richy-black to-richy-black-soft flex items-center justify-center px-4">
+        <div className="text-richy-gold animate-pulse">Chargement...</div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
