@@ -51,11 +51,17 @@ export async function POST(req: NextRequest) {
     // (l'utilisateur peut être connecté avec un autre compte)
     const isNewRegistration = !!pendingRegistration
     console.log('[create-checkout-session] isNewRegistration:', isNewRegistration, '(pendingRegistration présent:', !!pendingRegistration, ')')
+    console.log('[create-checkout-session] pendingRegistration complet:', JSON.stringify(pendingRegistration, null, 2))
     
     // Si c'est une nouvelle inscription mais qu'un utilisateur est connecté, on log un avertissement
     if (isNewRegistration && existingUser) {
       console.warn('[create-checkout-session] ⚠️ Nouvelle inscription détectée mais utilisateur connecté:', existingUser.email)
       console.warn('[create-checkout-session] ⚠️ Email de la nouvelle inscription:', pendingRegistration?.email)
+    }
+    
+    // Si ce n'est PAS une nouvelle inscription, on ne doit PAS insérer dans pending_registrations
+    if (!isNewRegistration) {
+      console.log('[create-checkout-session] ⚠️ Ce n\'est PAS une nouvelle inscription, on ne va PAS insérer dans pending_registrations')
     }
 
     // Vérifier NEXT_PUBLIC_APP_URL
@@ -69,8 +75,10 @@ export async function POST(req: NextRequest) {
     let user = existingUser
     let customerId: string | undefined
     let existingSub: any = null
-    let finalPriceType = isUpgrade ? 'direct' : priceType
+    let finalPriceType = isUpgrade ? 'direct' : (priceType || 'trial') // Fallback à 'trial' si priceType est undefined
     let registrationToken: string | null = null
+    
+    console.log('[create-checkout-session] finalPriceType déterminé:', finalPriceType, '(priceType:', priceType, ', isUpgrade:', isUpgrade, ')')
 
     if (isNewRegistration) {
       console.log('[create-checkout-session] ✅ Entrée dans le bloc isNewRegistration')
@@ -198,6 +206,17 @@ export async function POST(req: NextRequest) {
       // Aussi remplir password_encrypted au cas où les deux colonnes existent
       insertData.password_encrypted = encrypted
       
+      console.log('[create-checkout-session] 📦 Données à insérer dans pending_registrations:', {
+        token: registrationToken,
+        email: email,
+        hasPasswordHash: !!insertData.password_hash,
+        passwordHashLength: insertData.password_hash?.length || 0,
+        phone_number: phoneNumber,
+        phone_verification_id: phoneVerificationId,
+        plan_type: insertData.plan_type,
+        expires_at: insertData.expires_at
+      })
+      
       const { error: pendingError, data: pendingData } = await supabase
         .from('pending_registrations')
         .insert(insertData)
@@ -205,18 +224,28 @@ export async function POST(req: NextRequest) {
 
       if (pendingError) {
         console.error('[create-checkout-session] ❌ Erreur insert pending_registrations:', pendingError)
-        console.error('[create-checkout-session] Détails erreur:', {
+        console.error('[create-checkout-session] Détails erreur complète:', JSON.stringify({
           message: pendingError.message,
           details: pendingError.details,
           hint: pendingError.hint,
           code: pendingError.code
-        })
+        }, null, 2))
+        console.error('[create-checkout-session] Données qui ont causé l\'erreur:', JSON.stringify(insertData, null, 2))
         return NextResponse.json({
-          error: 'Erreur lors de la préparation de l\'inscription. Réessaie.'
+          error: 'Erreur lors de la préparation de l\'inscription. Réessaie.',
+          details: process.env.NODE_ENV === 'development' ? pendingError.message : undefined
+        }, { status: 500 })
+      }
+
+      if (!pendingData || pendingData.length === 0) {
+        console.error('[create-checkout-session] ❌ Insertion réussie mais aucune donnée retournée')
+        return NextResponse.json({
+          error: 'Erreur lors de l\'enregistrement. Réessaie.'
         }, { status: 500 })
       }
 
       console.log('[create-checkout-session] ✅ Insertion réussie dans pending_registrations:', pendingData)
+      console.log('[create-checkout-session] ✅ ID de l\'entrée créée:', pendingData[0]?.id)
 
       // Vérifier si un customer avec cet email existe déjà dans Stripe
       console.log('[create-checkout-session] 🔍 Vérification customer Stripe existant pour:', email)

@@ -79,7 +79,19 @@ export async function POST(req: NextRequest) {
           const subscription = await stripe.subscriptions.retrieve(session.subscription)
           
           let userId = subscription.metadata?.user_id as string | undefined
-          const planType = subscription.metadata?.plan_type || 'direct'
+          
+          // Déterminer le plan_type : utiliser les metadata si présents, sinon déduire depuis trial_end
+          let planType = subscription.metadata?.plan_type
+          
+          // Si plan_type n'est pas dans les metadata, le déduire depuis trial_end
+          if (!planType) {
+            const hasTrialEnd = subscription.trial_end && subscription.trial_end > Math.floor(Date.now() / 1000)
+            // Si il y a un trial_end dans le futur, c'est un trial
+            // Sinon, c'est direct (mais on devrait normalement toujours avoir plan_type dans metadata)
+            planType = hasTrialEnd ? 'trial' : 'direct'
+            console.log(`[webhook] ⚠️ plan_type manquant dans metadata, déduit depuis trial_end: ${planType}`)
+          }
+          
           const isUpgrade = subscription.metadata?.is_upgrade === 'true'
           const registrationToken = subscription.metadata?.registration_token || session.metadata?.registration_token
           
@@ -251,8 +263,8 @@ export async function POST(req: NextRequest) {
           
           // IMPORTANT: Le plan_type vient du metadata de la subscription
           // C'est ce que l'utilisateur a choisi sur pricing-choice
-          // Si planType n'est pas défini, utiliser isTrial pour déterminer
-          const finalPlanType = planType || (isTrial ? 'trial' : 'direct')
+          // planType est maintenant toujours défini (soit depuis metadata, soit déduit depuis trial_end)
+          const finalPlanType = planType
           
           // Déterminer les limitations selon le plan choisi
           // Si plan_type === 'trial', appliquer les limitations
