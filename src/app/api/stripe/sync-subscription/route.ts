@@ -174,6 +174,10 @@ export async function POST(req: NextRequest) {
     const planTypeFromMetadata = stripeSubscription.metadata?.plan_type
     const isUpgradeFromMetadata = stripeSubscription.metadata?.is_upgrade === 'true'
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:174',message:'H5/H6: Metadata sync-subscription',data:{planTypeFromMetadata,isUpgradeFromMetadata,hasTrialEnd,subscription_status:stripeSubscription.status,trial_end:stripeSubscription.trial_end},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
+    
     // C'est Premium si :
     // 1. C'est un upgrade explicite (is_upgrade === 'true')
     // 2. OU plan_type === 'direct' dans les metadata
@@ -181,6 +185,10 @@ export async function POST(req: NextRequest) {
     const isPremium = isUpgradeFromMetadata || 
                      planTypeFromMetadata === 'direct' ||
                      (!hasTrialEnd && stripeSubscription.status === 'active' && planTypeFromMetadata !== 'trial')
+
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:183',message:'H5/H6: isPremium calculé',data:{isPremium,isUpgradeFromMetadata,planTypeIsDirect:planTypeFromMetadata==='direct',condition3:!hasTrialEnd&&stripeSubscription.status==='active'&&planTypeFromMetadata!=='trial'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
 
     console.log(`[sync-subscription] User: ${user.id}, Status: ${stripeSubscription.status}, Trial end: ${stripeSubscription.trial_end}`)
     console.log(`[sync-subscription] Metadata - plan_type: ${planTypeFromMetadata}, is_upgrade: ${isUpgradeFromMetadata}`)
@@ -200,9 +208,17 @@ export async function POST(req: NextRequest) {
       console.log(`[sync-subscription] Plan type déduit depuis isPremium: ${finalPlanType}`)
     }
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:203',message:'H5/H6: finalPlanType déterminé',data:{finalPlanType,planTypeFromMetadata,isPremium},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
+    
     console.log(`[sync-subscription] Plan type final: ${finalPlanType} (metadata: ${planTypeFromMetadata}, isPremium: ${isPremium})`)
 
     // Créer ou mettre à jour la subscription dans la DB
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:217',message:'H5: subscriptionData avant insertion',data:{plan_type:finalPlanType,status:stripeSubscription.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
+    
     const subscriptionData = {
       user_id: user.id,
       stripe_customer_id: typeof stripeSubscription.customer === 'string' 

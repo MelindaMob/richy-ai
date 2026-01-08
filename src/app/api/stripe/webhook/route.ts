@@ -84,6 +84,10 @@ export async function POST(req: NextRequest) {
           console.log(`[webhook] 📋 Metadata subscription complètes:`, JSON.stringify(subscription.metadata, null, 2))
           console.log(`[webhook] 📋 Metadata session complètes:`, JSON.stringify(session.metadata, null, 2))
           
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:87',message:'H4: Metadata webhook reçues',data:{subscription_metadata:subscription.metadata,session_metadata:session.metadata,subscription_plan_type:subscription.metadata?.plan_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
+          
           let planType = subscription.metadata?.plan_type
           console.log(`[webhook] plan_type depuis subscription.metadata:`, planType)
           
@@ -94,7 +98,15 @@ export async function POST(req: NextRequest) {
             // Sinon, c'est direct (mais on devrait normalement toujours avoir plan_type dans metadata)
             planType = hasTrialEnd ? 'trial' : 'direct'
             console.log(`[webhook] ⚠️ plan_type manquant dans metadata, déduit depuis trial_end: ${planType}`)
+            
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:96',message:'H4: planType déduit depuis trial_end',data:{planType,hasTrialEnd,trial_end:subscription.trial_end},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+            // #endregion
           }
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:98',message:'H4: planType final webhook',data:{planType,subscription_status:subscription.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+          // #endregion
           
           const isUpgrade = subscription.metadata?.is_upgrade === 'true'
           const registrationToken = subscription.metadata?.registration_token || session.metadata?.registration_token

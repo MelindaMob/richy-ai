@@ -38,6 +38,10 @@ export async function POST(req: NextRequest) {
       pendingRegistration // Infos d'inscription si le compte n'existe pas encore
     } = await req.json()
 
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-checkout-session:39',message:'H1: priceType reçu',data:{priceType,isUpgrade,hasPendingReg:!!pendingRegistration},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+
     // LOGS DE DÉBOGAGE
     console.log('[create-checkout-session] === DÉBUT ===')
     console.log('[create-checkout-session] pendingRegistration:', pendingRegistration ? 'présent' : 'absent', pendingRegistration)
@@ -77,6 +81,10 @@ export async function POST(req: NextRequest) {
     let existingSub: any = null
     let finalPriceType = isUpgrade ? 'direct' : (priceType || 'trial') // Fallback à 'trial' si priceType est undefined
     let registrationToken: string | null = null
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-checkout-session:78',message:'H2: finalPriceType calculé',data:{finalPriceType,priceType,isUpgrade},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
     
     console.log('[create-checkout-session] finalPriceType déterminé:', finalPriceType, '(priceType:', priceType, ', isUpgrade:', isUpgrade, ')')
 
@@ -490,6 +498,11 @@ export async function POST(req: NextRequest) {
         ...(registrationToken ? { registration_token: registrationToken } : {}),
         plan_type: finalPriceType
       }
+    })
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-checkout-session:492',message:'H3: Metadata Stripe définies',data:{subscription_metadata_plan_type:finalPriceType,session_metadata_plan_type:finalPriceType,trial_period_days:finalPriceType==='trial'&&!isUpgrade?3:undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     
     console.log('[create-checkout-session] 📋 Metadata Stripe définies:', {
       subscription_metadata: {
@@ -503,7 +516,6 @@ export async function POST(req: NextRequest) {
         has_registration_token: !!registrationToken
       },
       trial_period_days: finalPriceType === 'trial' && !isUpgrade ? 3 : undefined
-    })
     })
     
     // Récupérer le customer depuis la session pour vérifier l'email
