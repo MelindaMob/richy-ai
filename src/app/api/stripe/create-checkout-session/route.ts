@@ -365,9 +365,23 @@ export async function POST(req: NextRequest) {
 
     // Créer la session (pour embedded checkout)
     console.log('[create-checkout-session] 🚀 Création session checkout avec customerId:', customerId)
+    
+    // Déterminer l'email à utiliser pour la session
+    // Pour les nouvelles inscriptions, utiliser l'email du pendingRegistration
+    // Pour les upgrades, utiliser l'email de l'utilisateur connecté
+    let sessionEmail: string | undefined
+    if (isNewRegistration && pendingRegistration?.email) {
+      sessionEmail = pendingRegistration.email.trim().toLowerCase()
+      console.log('[create-checkout-session] 📧 Email forcé pour session (nouvelle inscription):', sessionEmail)
+    } else if (user?.email) {
+      sessionEmail = user.email.trim().toLowerCase()
+      console.log('[create-checkout-session] 📧 Email utilisé pour session (utilisateur existant):', sessionEmail)
+    }
+    
     const session = await stripe.checkout.sessions.create({
       ui_mode: 'embedded', // IMPORTANT pour embedded
       customer: customerId,
+      ...(sessionEmail ? { customer_email: sessionEmail } : {}), // Forcer l'email pour les nouvelles inscriptions
       line_items: [
         {
           price: priceId,
