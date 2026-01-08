@@ -55,6 +55,18 @@ export default function PhoneVerification({
         return
       }
       
+      // Si une vérification existante peut être réutilisée, passer directement à l'étape vérifiée
+      if (data.reuseExisting && data.verificationId) {
+        console.log('[PhoneVerification] Réutilisation de la vérification existante:', data.verificationId)
+        // Normaliser le numéro (enlever les espaces)
+        const normalizedPhone = phone.replace(/\s/g, '')
+        setStep('verified')
+        setTimeout(() => {
+          onVerified({ phone: normalizedPhone, verificationId: data.verificationId })
+        }, 500)
+        return
+      }
+      
       setPhoneLastDigits(data.phoneLastDigits)
       setStep('code')
       

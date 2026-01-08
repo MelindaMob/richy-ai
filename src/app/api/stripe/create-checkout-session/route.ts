@@ -38,8 +38,16 @@ export async function POST(req: NextRequest) {
       pendingRegistration // Infos d'inscription si le compte n'existe pas encore
     } = await req.json()
 
+    // LOGS DE DÉBOGAGE
+    console.log('[create-checkout-session] === DÉBUT ===')
+    console.log('[create-checkout-session] pendingRegistration:', pendingRegistration ? 'présent' : 'absent', pendingRegistration)
+    console.log('[create-checkout-session] priceType:', priceType)
+
     const { data: { user: existingUser } } = await supabase.auth.getUser()
+    console.log('[create-checkout-session] existingUser:', existingUser ? `présent (${existingUser.id})` : 'absent')
+    
     const isNewRegistration = !!pendingRegistration && !existingUser
+    console.log('[create-checkout-session] isNewRegistration:', isNewRegistration)
 
     // Vérifier NEXT_PUBLIC_APP_URL
     if (!process.env.NEXT_PUBLIC_APP_URL) {
@@ -56,7 +64,7 @@ export async function POST(req: NextRequest) {
     let registrationToken: string | null = null
 
     if (isNewRegistration) {
-      console.log('[create-checkout-session] Nouveau flux sans création de compte préalable (pending_registration)')
+      console.log('[create-checkout-session] ✅ Entrée dans le bloc isNewRegistration')
       const registration = pendingRegistration || {}
 
       // Validations de base
@@ -65,7 +73,20 @@ export async function POST(req: NextRequest) {
       const phoneNumber = registration.phone_number
       const phoneVerificationId = registration.phone_verification_id
 
+      console.log('[create-checkout-session] Données extraites:', {
+        email: email ? 'présent' : 'absent',
+        password: password ? 'présent' : 'absent',
+        phoneNumber: phoneNumber ? 'présent' : 'absent',
+        phoneVerificationId: phoneVerificationId ? 'présent' : 'absent'
+      })
+
       if (!email || !password || !phoneNumber || !phoneVerificationId) {
+        console.error('[create-checkout-session] ❌ Données incomplètes:', {
+          email: !!email,
+          password: !!password,
+          phoneNumber: !!phoneNumber,
+          phoneVerificationId: !!phoneVerificationId
+        })
         return NextResponse.json({ 
           error: 'Données incomplètes. Merci de recommencer l\'inscription.' 
         }, { status: 400 })
@@ -136,7 +157,8 @@ export async function POST(req: NextRequest) {
       registrationToken = crypto.randomUUID()
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-      const { error: pendingError } = await supabase
+      console.log('[create-checkout-session] 🚀 Tentative d\'insertion dans pending_registrations')
+      const { error: pendingError, data: pendingData } = await supabase
         .from('pending_registrations')
         .insert({
           token: registrationToken,
@@ -149,16 +171,25 @@ export async function POST(req: NextRequest) {
           plan_type: finalPriceType || 'trial',
           expires_at: expiresAt
         })
+        .select()
 
       if (pendingError) {
-        console.error('[create-checkout-session] Erreur insert pending_registrations:', pendingError)
+        console.error('[create-checkout-session] ❌ Erreur insert pending_registrations:', pendingError)
+        console.error('[create-checkout-session] Détails erreur:', {
+          message: pendingError.message,
+          details: pendingError.details,
+          hint: pendingError.hint,
+          code: pendingError.code
+        })
         return NextResponse.json({
           error: 'Erreur lors de la préparation de l\'inscription. Réessaie.'
         }, { status: 500 })
       }
 
+      console.log('[create-checkout-session] ✅ Insertion réussie dans pending_registrations:', pendingData)
+
       // Créer un customer Stripe avec uniquement l'email
-      console.log('[create-checkout-session] Création client Stripe pour pending_registration')
+      console.log('[create-checkout-session] 🚀 Création client Stripe pour pending_registration')
       const customer = await stripe.customers.create({
         email,
         metadata: {
@@ -167,7 +198,9 @@ export async function POST(req: NextRequest) {
         balance: 0
       })
       customerId = customer.id
+      console.log('[create-checkout-session] ✅ Client Stripe créé:', customerId)
     } else {
+      console.log('[create-checkout-session] ⚠️ isNewRegistration est false, utilisation du flux utilisateur existant')
       if (!existingUser) {
         return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
       }

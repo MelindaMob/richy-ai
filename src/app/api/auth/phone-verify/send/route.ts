@@ -51,26 +51,56 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Vérifier aussi avec le hash dans phone_verifications si déjà vérifié
-    // Vérifier TOUS les enregistrements avec ce hash (pas seulement verified=true)
     const { data: allVerifications } = await supabase
       .from('phone_verifications')
-      .select('verified, phone_hash, created_at, account_created')
+      .select('id, verified, phone_hash, created_at, account_created')
       .eq('phone_hash', phoneHash)
       .order('created_at', { ascending: false })
 
-    // Si un enregistrement est déjà vérifié ET associé à un compte, bloquer
-    const hasAccountCreatedField = allVerifications && allVerifications.length > 0 && Object.prototype.hasOwnProperty.call(allVerifications[0], 'account_created')
-    const verifiedAndLinked = allVerifications?.some(v => v.verified === true && (!hasAccountCreatedField || v.account_created === true))
-    if (verifiedAndLinked) {
+    // Si un enregistrement est vérifié ET associé à un compte créé, bloquer
+    const verifiedWithAccount = allVerifications?.some(v => {
+      if (v.verified !== true) return false
+      // Si la colonne account_created existe, vérifier qu'elle est true
+      if (Object.prototype.hasOwnProperty.call(v, 'account_created')) {
+        return v.account_created === true
+      }
+      // Si la colonne n'existe pas, considérer comme bloqué si verified=true (ancien comportement)
+      return true
+    })
+
+    if (verifiedWithAccount) {
       console.log('[phone-verify/send] Numéro déjà vérifié et lié à un compte:', phoneHash)
       return NextResponse.json({
         error: 'Ce numéro a déjà été vérifié et est lié à un compte. Connecte-toi ou utilise un autre numéro.',
         alreadyUsed: true
       }, { status: 400 })
     }
-    
-    // Si un enregistrement récent existe (moins de 24h) même non vérifié, on peut aussi bloquer pour éviter le spam
-    // Mais on va laisser passer pour permettre une nouvelle tentative si le code a expiré
+
+    // Si une vérification existe avec verified=true mais account_created=false,
+    // permettre de réutiliser si elle n'est pas expirée (moins de 24h)
+    const existingVerified = allVerifications?.find(v => 
+      v.verified === true && 
+      Object.prototype.hasOwnProperty.call(v, 'account_created') && 
+      v.account_created === false
+    )
+
+    if (existingVerified) {
+      const createdAt = new Date(existingVerified.created_at)
+      const isExpired = Date.now() - createdAt.getTime() > 24 * 60 * 60 * 1000 // 24h
+      
+      if (!isExpired) {
+        console.log('[phone-verify/send] Vérification existante non expirée, réutilisation possible')
+        // Retourner un succès sans envoyer de SMS, le frontend pourra réutiliser cette vérification
+        return NextResponse.json({
+          success: true,
+          phoneLastDigits: phoneLast4,
+          reuseExisting: true,
+          verificationId: existingVerified.id
+        })
+      } else {
+        console.log('[phone-verify/send] Vérification existante expirée, création d\'une nouvelle')
+      }
+    }
 
     // 3. Si toutes les vérifications passent, générer et envoyer le code
     console.log('[phone-verify/send] Numéro valide, génération du code pour:', normalized)
