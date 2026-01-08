@@ -44,10 +44,19 @@ export async function POST(req: NextRequest) {
     console.log('[create-checkout-session] priceType:', priceType)
 
     const { data: { user: existingUser } } = await supabase.auth.getUser()
-    console.log('[create-checkout-session] existingUser:', existingUser ? `présent (${existingUser.id})` : 'absent')
+    console.log('[create-checkout-session] existingUser:', existingUser ? `présent (${existingUser.id}, ${existingUser.email})` : 'absent')
     
-    const isNewRegistration = !!pendingRegistration && !existingUser
-    console.log('[create-checkout-session] isNewRegistration:', isNewRegistration)
+    // Si pendingRegistration est présent, c'est une nouvelle inscription
+    // Même si un utilisateur est connecté, on permet la création d'un nouveau compte
+    // (l'utilisateur peut être connecté avec un autre compte)
+    const isNewRegistration = !!pendingRegistration
+    console.log('[create-checkout-session] isNewRegistration:', isNewRegistration, '(pendingRegistration présent:', !!pendingRegistration, ')')
+    
+    // Si c'est une nouvelle inscription mais qu'un utilisateur est connecté, on log un avertissement
+    if (isNewRegistration && existingUser) {
+      console.warn('[create-checkout-session] ⚠️ Nouvelle inscription détectée mais utilisateur connecté:', existingUser.email)
+      console.warn('[create-checkout-session] ⚠️ Email de la nouvelle inscription:', pendingRegistration?.email)
+    }
 
     // Vérifier NEXT_PUBLIC_APP_URL
     if (!process.env.NEXT_PUBLIC_APP_URL) {
@@ -366,22 +375,35 @@ export async function POST(req: NextRequest) {
     // Créer la session (pour embedded checkout)
     console.log('[create-checkout-session] 🚀 Création session checkout avec customerId:', customerId)
     
-    // Déterminer l'email à utiliser pour la session
-    // Pour les nouvelles inscriptions, utiliser l'email du pendingRegistration
-    // Pour les upgrades, utiliser l'email de l'utilisateur connecté
-    let sessionEmail: string | undefined
-    if (isNewRegistration && pendingRegistration?.email) {
-      sessionEmail = pendingRegistration.email.trim().toLowerCase()
-      console.log('[create-checkout-session] 📧 Email forcé pour session (nouvelle inscription):', sessionEmail)
-    } else if (user?.email) {
-      sessionEmail = user.email.trim().toLowerCase()
-      console.log('[create-checkout-session] 📧 Email utilisé pour session (utilisateur existant):', sessionEmail)
+    // Pour les nouvelles inscriptions, s'assurer que le customer a le bon email
+    // On ne peut pas utiliser customer_email si customer est déjà fourni
+    if (isNewRegistration && pendingRegistration?.email && customerId) {
+      const correctEmail = pendingRegistration.email.trim().toLowerCase()
+      try {
+        // Récupérer le customer actuel pour vérifier son email
+        const currentCustomer = await stripe.customers.retrieve(customerId) as Stripe.Customer
+        if (currentCustomer.email?.toLowerCase() !== correctEmail) {
+          console.log('[create-checkout-session] 📧 Mise à jour email du customer:', {
+            ancien: currentCustomer.email,
+            nouveau: correctEmail
+          })
+          // Mettre à jour l'email du customer
+          await stripe.customers.update(customerId, {
+            email: correctEmail
+          })
+          console.log('[create-checkout-session] ✅ Email du customer mis à jour')
+        } else {
+          console.log('[create-checkout-session] ✅ Email du customer déjà correct')
+        }
+      } catch (updateError: any) {
+        console.error('[create-checkout-session] ❌ Erreur mise à jour email customer:', updateError)
+        // Ne pas bloquer, on continue quand même
+      }
     }
     
     const session = await stripe.checkout.sessions.create({
       ui_mode: 'embedded', // IMPORTANT pour embedded
       customer: customerId,
-      ...(sessionEmail ? { customer_email: sessionEmail } : {}), // Forcer l'email pour les nouvelles inscriptions
       line_items: [
         {
           price: priceId,
@@ -433,9 +455,29 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('Create checkout error:', error)
+    console.error('[create-checkout-session] ❌ ERREUR COMPLÈTE:', {
+      message: error?.message,
+      stack: error?.stack,
+      code: error?.code,
+      statusCode: error?.statusCode,
+      type: error?.type,
+      raw: error
+    })
+    
+    // Retourner un message d'erreur plus détaillé en développement, générique en production
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? `Erreur création checkout: ${error?.message || 'Erreur inconnue'}`
+      : 'Erreur lors de la création de la session de paiement. Veuillez réessayer.'
+    
     return NextResponse.json(
-      { error: 'Erreur création checkout' },
+      { 
+        error: errorMessage,
+        details: process.env.NODE_ENV === 'development' ? {
+          code: error?.code,
+          type: error?.type,
+          statusCode: error?.statusCode
+        } : undefined
+      },
       { status: 500 }
     )
   }
