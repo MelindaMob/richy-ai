@@ -109,6 +109,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Message requis' }, { status: 400 })
     }
 
+    // Générer un thread_id si pas fourni (défini ici pour être accessible partout)
+    const currentThreadId = thread_id || crypto.randomUUID()
+
     // Si pas de clé Groq, utiliser la démo
     if (!process.env.GROQ_API_KEY) {
       const demoResponses = [
@@ -119,9 +122,6 @@ export async function POST(req: NextRequest) {
       ]
 
       const randomResponse = demoResponses[Math.floor(Math.random() * demoResponses.length)]
-
-      // Générer un thread_id si pas fourni
-      const currentThreadId = thread_id || crypto.randomUUID()
 
       await supabase.from('conversations').insert({
         user_id: user.id,
@@ -175,9 +175,6 @@ export async function POST(req: NextRequest) {
       const response = rawResponse.trim()
 
       console.log('✅ Réponse Groq reçue:', response.substring(0, 100) + '...')
-
-      // Générer un thread_id si pas fourni
-      const currentThreadId = thread_id || crypto.randomUUID()
 
       // Sauvegarder la conversation
       const { error: insertError } = await supabase.from('conversations').insert({
