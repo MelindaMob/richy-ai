@@ -317,6 +317,12 @@ export async function POST(req: NextRequest) {
         }, {
           onConflict: 'user_id'
         })
+        
+        // IMPORTANT: Mettre à jour le profil avec stripe_customer_id pour que le middleware laisse passer
+        console.log('[create-checkout-session] Mise à jour profil avec stripe_customer_id pour upgrade:', customerId)
+        await supabase.from('profiles')
+          .update({ stripe_customer_id: customerId })
+          .eq('id', user.id)
       } else {
         try {
           const customer = await stripe.customers.retrieve(customerId)
@@ -326,6 +332,21 @@ export async function POST(req: NextRequest) {
 
           if ((customer as any).balance !== 0) {
             await stripe.customers.update(customerId, { balance: 0 })
+          }
+          
+          // IMPORTANT: S'assurer que le profil a bien stripe_customer_id
+          console.log('[create-checkout-session] Vérification profil avec stripe_customer_id pour upgrade:', customerId)
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('stripe_customer_id')
+            .eq('id', user.id)
+            .maybeSingle()
+          
+          if (!profile?.stripe_customer_id) {
+            console.log('[create-checkout-session] Mise à jour profil avec stripe_customer_id (manquant):', customerId)
+            await supabase.from('profiles')
+              .update({ stripe_customer_id: customerId })
+              .eq('id', user.id)
           }
         } catch (error: any) {
           console.log(`[create-checkout-session] Customer ${customerId} not found in Stripe, creating new one`)
@@ -343,6 +364,12 @@ export async function POST(req: NextRequest) {
             stripe_customer_id: customerId,
             status: existingSub?.status || 'pending'
           })
+          
+          // IMPORTANT: Mettre à jour le profil avec le nouveau stripe_customer_id
+          console.log('[create-checkout-session] Mise à jour profil avec nouveau stripe_customer_id pour upgrade:', customerId)
+          await supabase.from('profiles')
+            .update({ stripe_customer_id: customerId })
+            .eq('id', user.id)
         }
       }
     }

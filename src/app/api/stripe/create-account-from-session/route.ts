@@ -204,6 +204,15 @@ export async function POST(req: NextRequest) {
     const userId = createdUser.user.id
     console.log('[create-account-from-session] ✅ Utilisateur créé:', userId)
 
+    // Récupérer le customer_id depuis la session Stripe
+    let stripeCustomerId: string | null = null
+    if (session.customer) {
+      stripeCustomerId = typeof session.customer === 'string' 
+        ? session.customer 
+        : session.customer.id
+      console.log('[create-account-from-session] Customer Stripe récupéré:', stripeCustomerId)
+    }
+
     // Créer le profil (sans phone_number car cette colonne n'existe pas dans profiles)
     const { error: profileError } = await supabase
       .from('profiles')
@@ -211,15 +220,31 @@ export async function POST(req: NextRequest) {
         id: userId,
         email: pendingReg.email,
         full_name: pendingReg.full_name || null,
-        company_name: pendingReg.company_name || null
+        company_name: pendingReg.company_name || null,
+        ...(stripeCustomerId ? { stripe_customer_id: stripeCustomerId } : {})
         // Note: phone_number n'existe pas dans la table profiles
       })
 
     if (profileError) {
       console.error('[create-account-from-session] Erreur insertion profil:', profileError)
-      // Ne pas bloquer, on continue
+      // Si l'erreur est due à un profil existant, essayer de mettre à jour
+      if (profileError.code === '23505') { // Duplicate key
+        console.log('[create-account-from-session] Profil existe déjà, mise à jour avec stripe_customer_id')
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            ...(stripeCustomerId ? { stripe_customer_id: stripeCustomerId } : {})
+          })
+          .eq('id', userId)
+        
+        if (updateError) {
+          console.error('[create-account-from-session] Erreur mise à jour profil:', updateError)
+        } else {
+          console.log('[create-account-from-session] ✅ Profil mis à jour avec stripe_customer_id')
+        }
+      }
     } else {
-      console.log('[create-account-from-session] ✅ Profil créé')
+      console.log('[create-account-from-session] ✅ Profil créé avec stripe_customer_id:', stripeCustomerId)
     }
 
     // Marquer account_created dans phone_verifications

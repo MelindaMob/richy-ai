@@ -86,22 +86,35 @@ function PaymentSuccessContent() {
         const data = await response.json()
         console.log('[payment-success] Subscription synced:', data)
         
-        // Si la synchronisation a réussi, rediriger directement vers le dashboard
-        // Pour un upgrade, l'utilisateur est déjà connecté, donc on peut rediriger directement
+        // Si la synchronisation a réussi, attendre un peu pour que tout soit bien synchronisé
+        // puis rediriger vers le dashboard
         if (data.success || data.subscription) {
-          console.log('[payment-success] ✅ Synchronisation réussie, redirection vers dashboard')
+          console.log('[payment-success] ✅ Synchronisation réussie, attente 1 seconde puis redirection')
+          // Attendre 1 seconde pour que le profil soit bien mis à jour avec stripe_customer_id
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          console.log('[payment-success] Redirection vers dashboard')
           // Utiliser window.location.href pour forcer un rechargement complet et mettre à jour la session
+          window.location.href = '/dashboard'
+          return
+        } else {
+          console.error('[payment-success] ❌ Synchronisation échouée:', data)
+          // Si la synchronisation échoue, attendre quand même un peu au cas où le webhook arrive
+          // Le middleware laissera passer si stripe_customer_id existe dans le profil
+          console.log('[payment-success] Attente 3 secondes au cas où le webhook arrive...')
+          await new Promise(resolve => setTimeout(resolve, 3000))
+          console.log('[payment-success] Redirection vers dashboard (même si sync échouée)')
           window.location.href = '/dashboard'
           return
         }
       } catch (error) {
         console.error('[payment-success] Error:', error)
+        // En cas d'erreur, attendre un peu et rediriger quand même
+        // Le middleware laissera passer si stripe_customer_id existe dans le profil
+        console.log('[payment-success] Erreur capturée, attente 3 secondes puis redirection')
+        await new Promise(resolve => setTimeout(resolve, 3000))
+        window.location.href = '/dashboard'
       } finally {
         setSyncing(false)
-        // Rediriger vers le dashboard après 2 secondes
-        setTimeout(() => {
-          router.push('/dashboard')
-        }, 2000)
       }
     }
 

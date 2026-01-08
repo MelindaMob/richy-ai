@@ -143,11 +143,29 @@ export async function POST(req: NextRequest) {
 
     if (!stripeSubscription) {
       console.error(`[sync-subscription] No subscription found in Stripe for user ${user.id}, email: ${user.email}`)
+      
+      // IMPORTANT: Même si on ne trouve pas de subscription, mettre à jour le profil avec stripe_customer_id
+      // pour que le middleware laisse passer (le webhook créera la subscription plus tard)
+      if (customerId) {
+        console.log('[sync-subscription] Subscription non trouvée mais customerId existe, mise à jour profil:', customerId)
+        const { error: profileUpdateError } = await supabase
+          .from('profiles')
+          .update({ stripe_customer_id: customerId })
+          .eq('id', user.id)
+        
+        if (profileUpdateError) {
+          console.error('[sync-subscription] Erreur mise à jour profil avec stripe_customer_id:', profileUpdateError)
+        } else {
+          console.log('[sync-subscription] ✅ Profil mis à jour avec stripe_customer_id (subscription pas encore disponible)')
+        }
+      }
+      
       return NextResponse.json({ 
         error: 'Aucune subscription trouvée dans Stripe. Vérifie que tu as bien complété le paiement.',
         userId: user.id,
         email: user.email,
-        customerFound: !!customerId
+        customerFound: !!customerId,
+        profileUpdated: !!customerId // Indique que le profil a été mis à jour
       }, { status: 404 })
     }
 
@@ -213,6 +231,26 @@ export async function POST(req: NextRequest) {
     if (upsertError) {
       console.error('[sync-subscription] Error upserting subscription:', upsertError)
       throw upsertError
+    }
+
+    // IMPORTANT: Mettre à jour le profil avec stripe_customer_id pour que le middleware laisse passer
+    const stripeCustomerId = typeof stripeSubscription.customer === 'string' 
+      ? stripeSubscription.customer 
+      : stripeSubscription.customer.id
+    
+    if (stripeCustomerId) {
+      console.log('[sync-subscription] Mise à jour profil avec stripe_customer_id:', stripeCustomerId)
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update({ stripe_customer_id: stripeCustomerId })
+        .eq('id', user.id)
+      
+      if (profileUpdateError) {
+        console.error('[sync-subscription] Erreur mise à jour profil avec stripe_customer_id:', profileUpdateError)
+        // Ne pas bloquer, on continue
+      } else {
+        console.log('[sync-subscription] ✅ Profil mis à jour avec stripe_customer_id')
+      }
     }
 
     return NextResponse.json({ 
