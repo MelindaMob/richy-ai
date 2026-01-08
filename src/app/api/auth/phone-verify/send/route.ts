@@ -121,53 +121,50 @@ export async function POST(req: NextRequest) {
       }, { status: 500 })
     }
 
-    // Stocker le code dans phone_verifications avec le schéma existant
-    const insertData: any = {
+    // Vérifier s'il existe déjà une entrée pour ce phone_hash
+    // Avec la contrainte UNIQUE, on ne peut avoir qu'une seule entrée par phone_hash
+    const { data: existingVerification } = await supabase
+      .from('phone_verifications')
+      .select('id, verified, account_created, attempts')
+      .eq('phone_hash', phoneHash)
+      .maybeSingle()
+
+    // Préparer les données à insérer/mettre à jour
+    const verificationData: any = {
       phone_hash: phoneHash,
       phone_last_4: phoneLast4,
       country_code: countryCode,
+      verification_code: code,
+      code_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       verified: false
     }
 
-    // Essayer d'insérer avec verification_code si la colonne existe
-    // Sinon, on stockera le code dans code_expires_at ou on utilisera une autre approche
-    let codeStored = false
-    try {
-      // Essayer avec verification_code
-      const { error: insertError } = await supabase
-        .from('phone_verifications')
-        .insert({
-          ...insertData,
-          verification_code: code,
-          code_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString()
-        })
+    // Réinitialiser les tentatives si la colonne existe
+    if (existingVerification && existingVerification.attempts !== undefined) {
+      verificationData.attempts = 0
+    }
 
-      if (!insertError) {
-        codeStored = true
-      } else {
-        // Si verification_code n'existe pas, essayer sans mais stocker le code ailleurs
-        // On peut utiliser une approche différente : stocker dans une table séparée ou en mémoire
-        console.error('Error storing with verification_code:', insertError)
-        
-        // Essayer juste avec les colonnes de base (le code sera vérifié côté serveur)
-        const { error: insertError2 } = await supabase
-          .from('phone_verifications')
-          .insert({
-            ...insertData,
-            code_expires_at: new Date(Date.now() + 10 * 60 * 1000).toISOString()
-          })
+    // Utiliser upsert pour gérer la contrainte UNIQUE
+    // Si l'entrée existe, elle sera mise à jour avec le nouveau code
+    // Si elle n'existe pas, elle sera créée
+    const { error: upsertError } = await supabase
+      .from('phone_verifications')
+      .upsert(verificationData, {
+        onConflict: 'phone_hash',
+        ignoreDuplicates: false
+      })
 
-        if (!insertError2) {
-          codeStored = true
-          // Stocker le code temporairement (en production, utiliser Redis ou une table dédiée)
-          // Pour l'instant, on va devoir ajouter la colonne verification_code
-          console.warn('Code envoyé mais pas stocké en BDD. Ajoutez la colonne verification_code à phone_verifications.')
-        } else {
-          console.error('Error storing verification code:', insertError2)
-        }
-      }
-    } catch (err) {
-      console.error('Error inserting verification:', err)
+    if (upsertError) {
+      console.error('[phone-verify/send] Erreur lors de l\'upsert:', upsertError)
+      return NextResponse.json({
+        error: 'Erreur lors de l\'enregistrement du code'
+      }, { status: 500 })
+    }
+
+    if (existingVerification) {
+      console.log('[phone-verify/send] Code mis à jour dans l\'entrée existante:', existingVerification.id)
+    } else {
+      console.log('[phone-verify/send] Nouvelle entrée créée avec succès')
     }
 
     // Retourner les 4 derniers chiffres pour affichage

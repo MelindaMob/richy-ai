@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Vérifier le code dans la table phone_verifications
+    // Avec la contrainte UNIQUE sur phone_hash, il ne peut y avoir qu'une seule entrée
     console.log('[phone-verify/confirm] Recherche vérification pour phone_hash:', phoneHash, 'code:', code)
     
     const { data: verification, error: verifyError } = await supabase
