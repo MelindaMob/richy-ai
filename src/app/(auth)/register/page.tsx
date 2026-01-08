@@ -365,7 +365,13 @@ export default function RegisterPage() {
                     // Stocker dans sessionStorage pour la page pricing-choice
                     sessionStorage.setItem('pending_registration', JSON.stringify(registrationData))
                     
-                    console.log('[register] Infos d\'inscription stockées, redirection vers pricing-choice')
+                    console.log('[register] Infos d\'inscription stockées:', {
+                      email: registrationData.email,
+                      emailFromForm: formData.email,
+                      phone: registrationData.phone_number,
+                      verificationId: registrationData.phone_verification_id
+                    })
+                    console.log('[register] Redirection vers pricing-choice')
                     
                     // Rediriger vers la page de choix de plan
                     // Le compte sera créé lors du checkout Stripe

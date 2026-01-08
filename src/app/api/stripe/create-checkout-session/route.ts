@@ -74,7 +74,9 @@ export async function POST(req: NextRequest) {
       const phoneVerificationId = registration.phone_verification_id
 
       console.log('[create-checkout-session] Données extraites:', {
-        email: email ? 'présent' : 'absent',
+        email: email || 'VIDE',
+        emailLength: email?.length || 0,
+        emailFromRegistration: registration.email || 'VIDE',
         password: password ? 'présent' : 'absent',
         phoneNumber: phoneNumber ? 'présent' : 'absent',
         phoneVerificationId: phoneVerificationId ? 'présent' : 'absent'
@@ -188,8 +190,28 @@ export async function POST(req: NextRequest) {
 
       console.log('[create-checkout-session] ✅ Insertion réussie dans pending_registrations:', pendingData)
 
+      // Vérifier si un customer avec cet email existe déjà dans Stripe
+      console.log('[create-checkout-session] 🔍 Vérification customer Stripe existant pour:', email)
+      const existingCustomers = await stripe.customers.list({
+        email: email,
+        limit: 5
+      })
+
+      console.log('[create-checkout-session] Customers Stripe trouvés avec cet email:', existingCustomers.data.length)
+      if (existingCustomers.data.length > 0) {
+        existingCustomers.data.forEach((c, idx) => {
+          console.log(`[create-checkout-session] Customer ${idx + 1}:`, {
+            id: c.id,
+            email: c.email,
+            created: new Date(c.created * 1000).toISOString(),
+            metadata: c.metadata
+          })
+        })
+      }
+
       // Créer un customer Stripe avec uniquement l'email
       console.log('[create-checkout-session] 🚀 Création client Stripe pour pending_registration')
+      console.log('[create-checkout-session] Email utilisé pour customer Stripe:', email)
       const customer = await stripe.customers.create({
         email,
         metadata: {
@@ -198,7 +220,12 @@ export async function POST(req: NextRequest) {
         balance: 0
       })
       customerId = customer.id
-      console.log('[create-checkout-session] ✅ Client Stripe créé:', customerId)
+      console.log('[create-checkout-session] ✅ Client Stripe créé:', {
+        customerId,
+        email: customer.email,
+        emailMatch: customer.email === email ? '✅ MATCH' : '❌ DIFFÉRENT',
+        created: new Date(customer.created * 1000).toISOString()
+      })
     } else {
       console.log('[create-checkout-session] ⚠️ isNewRegistration est false, utilisation du flux utilisateur existant')
       if (!existingUser) {
@@ -283,7 +310,22 @@ export async function POST(req: NextRequest) {
       }, { status: 500 })
     }
 
+    // Vérifier le customer avant de créer la session
+    if (customerId) {
+      try {
+        const customerCheck = await stripe.customers.retrieve(customerId)
+        console.log('[create-checkout-session] 🔍 Customer vérifié avant session:', {
+          id: customerCheck.id,
+          email: (customerCheck as Stripe.Customer).email,
+          deleted: (customerCheck as Stripe.Customer).deleted || false
+        })
+      } catch (err) {
+        console.error('[create-checkout-session] Erreur vérification customer:', err)
+      }
+    }
+
     // Créer la session (pour embedded checkout)
+    console.log('[create-checkout-session] 🚀 Création session checkout avec customerId:', customerId)
     const session = await stripe.checkout.sessions.create({
       ui_mode: 'embedded', // IMPORTANT pour embedded
       customer: customerId,
@@ -319,7 +361,19 @@ export async function POST(req: NextRequest) {
       }
     })
     
+    // Récupérer le customer depuis la session pour vérifier l'email
+    let sessionCustomerEmail = 'N/A'
+    if (session.customer && typeof session.customer === 'string') {
+      try {
+        const sessionCustomer = await stripe.customers.retrieve(session.customer)
+        sessionCustomerEmail = (sessionCustomer as Stripe.Customer).email || 'N/A'
+      } catch (err) {
+        console.error('[create-checkout-session] Erreur récupération customer depuis session:', err)
+      }
+    }
+
     console.log(`[create-checkout-session] Session created: ${session.id}, plan_type: ${finalPriceType}, is_upgrade: ${isUpgrade}, registration_token: ${registrationToken}`)
+    console.log(`[create-checkout-session] Email dans session customer: ${sessionCustomerEmail}`)
 
     return NextResponse.json({
       clientSecret: session.client_secret

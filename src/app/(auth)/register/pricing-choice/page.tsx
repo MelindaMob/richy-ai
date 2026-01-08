@@ -33,10 +33,17 @@ function PricingChoiceContent() {
     if (pendingDataStr) {
       try {
         const data = JSON.parse(pendingDataStr)
+        console.log('[pricing-choice] Données pending_registration récupérées:', {
+          email: data.email,
+          phone: data.phone_number,
+          verificationId: data.phone_verification_id
+        })
         setPendingRegistration(data)
       } catch (e) {
         console.error('Erreur parsing pending registration:', e)
       }
+    } else {
+      console.warn('[pricing-choice] Aucune donnée pending_registration trouvée dans sessionStorage')
     }
 
     const checkAuth = async () => {
