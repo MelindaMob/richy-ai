@@ -81,7 +81,11 @@ export async function POST(req: NextRequest) {
           let userId = subscription.metadata?.user_id as string | undefined
           
           // Déterminer le plan_type : utiliser les metadata si présents, sinon déduire depuis trial_end
+          console.log(`[webhook] 📋 Metadata subscription complètes:`, JSON.stringify(subscription.metadata, null, 2))
+          console.log(`[webhook] 📋 Metadata session complètes:`, JSON.stringify(session.metadata, null, 2))
+          
           let planType = subscription.metadata?.plan_type
+          console.log(`[webhook] plan_type depuis subscription.metadata:`, planType)
           
           // Si plan_type n'est pas dans les metadata, le déduire depuis trial_end
           if (!planType) {

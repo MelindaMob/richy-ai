@@ -490,6 +490,20 @@ export async function POST(req: NextRequest) {
         ...(registrationToken ? { registration_token: registrationToken } : {}),
         plan_type: finalPriceType
       }
+    
+    console.log('[create-checkout-session] 📋 Metadata Stripe définies:', {
+      subscription_metadata: {
+        plan_type: finalPriceType,
+        is_upgrade: isUpgrade.toString(),
+        has_user_id: !!user?.id,
+        has_registration_token: !!registrationToken
+      },
+      session_metadata: {
+        plan_type: finalPriceType,
+        has_registration_token: !!registrationToken
+      },
+      trial_period_days: finalPriceType === 'trial' && !isUpgrade ? 3 : undefined
+    })
     })
     
     // Récupérer le customer depuis la session pour vérifier l'email

@@ -187,8 +187,18 @@ export async function POST(req: NextRequest) {
     console.log(`[sync-subscription] Is Premium: ${isPremium}`)
 
     // Déterminer le plan_type depuis les metadata Stripe (priorité absolue)
-    // Si plan_type est 'direct' dans les metadata, c'est premium, même si status est 'trialing'
-    const finalPlanType = planTypeFromMetadata === 'direct' ? 'direct' : (isPremium ? 'direct' : 'trial')
+    // Si plan_type est défini dans les metadata, l'utiliser directement
+    // Sinon, déduire depuis isPremium
+    let finalPlanType: 'trial' | 'direct'
+    if (planTypeFromMetadata === 'trial' || planTypeFromMetadata === 'direct') {
+      // Si plan_type est explicitement défini dans les metadata, l'utiliser
+      finalPlanType = planTypeFromMetadata
+      console.log(`[sync-subscription] Plan type depuis metadata: ${finalPlanType}`)
+    } else {
+      // Si plan_type n'est pas dans les metadata, déduire depuis isPremium
+      finalPlanType = isPremium ? 'direct' : 'trial'
+      console.log(`[sync-subscription] Plan type déduit depuis isPremium: ${finalPlanType}`)
+    }
     
     console.log(`[sync-subscription] Plan type final: ${finalPlanType} (metadata: ${planTypeFromMetadata}, isPremium: ${isPremium})`)
 
