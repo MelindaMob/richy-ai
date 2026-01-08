@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import UpgradeModal from '@/components/UpgradeModal'
+import { DashboardHeader } from '../dashboard/dashboard-header'
 
 interface ValidatorResult {
   score: number
@@ -27,8 +28,102 @@ export default function ValidatorPage() {
   const [result, setResult] = useState<ValidatorResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  const [headerData, setHeaderData] = useState<{
+    trialDaysLeft: number
+    userEmail: string
+    subscriptionStatus: string
+    hasTrialLimitations: boolean
+  } | null>(null)
   const router = useRouter()
   const supabase = createClient()
+
+  // Récupérer les données pour le header
+  useEffect(() => {
+    const fetchHeaderData = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError) {
+          console.error('Error getting user:', userError)
+          if (userError.message?.includes('Failed to fetch')) {
+            return
+          }
+        }
+        
+        if (!user) return
+
+        // Récupérer le profil
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        if (profileError && !profileError.message?.includes('Failed to fetch')) {
+          console.error('Error fetching profile:', profileError)
+        }
+
+        // Récupérer la subscription
+        const { data: subscription, error: subscriptionError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (subscriptionError && !subscriptionError.message?.includes('Failed to fetch')) {
+          console.error('Error fetching subscription:', subscriptionError)
+        }
+
+        // Calculer les jours restants d'essai
+        let trialDaysLeft = 0
+        let subscriptionStatus = subscription?.status || 'pending'
+        let hasTrialLimitations = !!subscription?.trial_limitations
+        
+        const isTrialPlan = subscription?.plan_type === 'trial'
+        const isCurrentlyTrial = subscription?.trial_ends_at && new Date(subscription.trial_ends_at) > new Date()
+        
+        if (isTrialPlan) {
+          hasTrialLimitations = true
+          if (subscription?.trial_ends_at) {
+            const trialEnd = new Date(subscription.trial_ends_at)
+            const now = new Date()
+            trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          } else if (subscription?.created_at) {
+            const createdAt = new Date(subscription.created_at)
+            const trialEnd = new Date(createdAt)
+            trialEnd.setDate(trialEnd.getDate() + 3)
+            const now = new Date()
+            trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          } else {
+            trialDaysLeft = 3
+          }
+          if (subscriptionStatus !== 'trialing') {
+            subscriptionStatus = 'trialing'
+          }
+        } else if (isCurrentlyTrial) {
+          hasTrialLimitations = true
+          const trialEnd = new Date(subscription.trial_ends_at)
+          const now = new Date()
+          trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        }
+
+        setHeaderData({
+          trialDaysLeft,
+          userEmail: profile?.email || user.email || '',
+          subscriptionStatus,
+          hasTrialLimitations
+        })
+      } catch (error: any) {
+        if (error?.message?.includes('Failed to fetch') || error instanceof TypeError) {
+          console.warn('Network error fetching header data (non-blocking):', error)
+          return
+        }
+        console.error('Error fetching header data:', error)
+      }
+    }
+
+    fetchHeaderData()
+  }, [])
 
   const handleValidate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -110,28 +205,14 @@ export default function ValidatorPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft">
       {/* Header */}
-      <header className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/dashboard" className="font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
-            RICHY.AI
-          </Link>
-          
-          <nav className="flex items-center space-x-6">
-            <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors">
-              ← Dashboard
-            </Link>
-            <Link href="/chat" className="text-gray-400 hover:text-white transition-colors">
-              Chat
-            </Link>
-            <Link href="/prompt" className="text-gray-400 hover:text-white transition-colors">
-              Prompt
-            </Link>
-            <Link href="/builder" className="text-gray-400 hover:text-white transition-colors">
-              Builder
-            </Link>
-          </nav>
-        </div>
-      </header>
+      {headerData && (
+        <DashboardHeader 
+          trialDaysLeft={headerData.trialDaysLeft}
+          userEmail={headerData.userEmail}
+          subscriptionStatus={headerData.subscriptionStatus}
+          hasTrialLimitations={headerData.hasTrialLimitations}
+        />
+      )}
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-12 max-w-4xl">

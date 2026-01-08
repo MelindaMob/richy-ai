@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import UpgradeModal from '@/components/UpgradeModal'
+import { DashboardHeader } from '../dashboard/dashboard-header'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -20,10 +21,104 @@ function ChatContent() {
   const [loadingHistory, setLoadingHistory] = useState(true)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [currentThreadId, setCurrentThreadId] = useState<string | undefined>(undefined)
+  const [headerData, setHeaderData] = useState<{
+    trialDaysLeft: number
+    userEmail: string
+    subscriptionStatus: string
+    hasTrialLimitations: boolean
+  } | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
+
+  // Récupérer les données pour le header
+  useEffect(() => {
+    const fetchHeaderData = async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError) {
+          console.error('Error getting user:', userError)
+          if (userError.message?.includes('Failed to fetch')) {
+            return
+          }
+        }
+        
+        if (!user) return
+
+        // Récupérer le profil
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        if (profileError && !profileError.message?.includes('Failed to fetch')) {
+          console.error('Error fetching profile:', profileError)
+        }
+
+        // Récupérer la subscription
+        const { data: subscription, error: subscriptionError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (subscriptionError && !subscriptionError.message?.includes('Failed to fetch')) {
+          console.error('Error fetching subscription:', subscriptionError)
+        }
+
+        // Calculer les jours restants d'essai
+        let trialDaysLeft = 0
+        let subscriptionStatus = subscription?.status || 'pending'
+        let hasTrialLimitations = !!subscription?.trial_limitations
+        
+        const isTrialPlan = subscription?.plan_type === 'trial'
+        const isCurrentlyTrial = subscription?.trial_ends_at && new Date(subscription.trial_ends_at) > new Date()
+        
+        if (isTrialPlan) {
+          hasTrialLimitations = true
+          if (subscription?.trial_ends_at) {
+            const trialEnd = new Date(subscription.trial_ends_at)
+            const now = new Date()
+            trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          } else if (subscription?.created_at) {
+            const createdAt = new Date(subscription.created_at)
+            const trialEnd = new Date(createdAt)
+            trialEnd.setDate(trialEnd.getDate() + 3)
+            const now = new Date()
+            trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          } else {
+            trialDaysLeft = 3
+          }
+          if (subscriptionStatus !== 'trialing') {
+            subscriptionStatus = 'trialing'
+          }
+        } else if (isCurrentlyTrial) {
+          hasTrialLimitations = true
+          const trialEnd = new Date(subscription.trial_ends_at)
+          const now = new Date()
+          trialDaysLeft = Math.max(0, Math.ceil((trialEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        }
+
+        setHeaderData({
+          trialDaysLeft,
+          userEmail: profile?.email || user.email || '',
+          subscriptionStatus,
+          hasTrialLimitations
+        })
+      } catch (error: any) {
+        if (error?.message?.includes('Failed to fetch') || error instanceof TypeError) {
+          console.warn('Network error fetching header data (non-blocking):', error)
+          return
+        }
+        console.error('Error fetching header data:', error)
+      }
+    }
+
+    fetchHeaderData()
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -235,23 +330,15 @@ function ChatContent() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft flex flex-col">
-      <header className="border-b border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/dashboard" className="font-display text-3xl text-richy-gold hover:text-richy-gold-light transition-colors">
-              RICHY.AI
-            </Link>
-            <span className="text-gray-400">•</span>
-            <span className="text-white font-semibold">💬 Chat</span>
-          </div>
-          <nav className="flex items-center space-x-6">
-            <Link href="/dashboard" className="text-gray-400 hover:text-white transition-colors text-sm">← Dashboard</Link>
-            <Link href="/validator" className="text-gray-400 hover:text-white transition-colors text-sm">Validator</Link>
-            <Link href="/prompt" className="text-gray-400 hover:text-white transition-colors text-sm">Prompt</Link>
-            <Link href="/builder" className="text-gray-400 hover:text-white transition-colors text-sm">Builder</Link>
-          </nav>
-        </div>
-      </header>
+      {/* Header */}
+      {headerData && (
+        <DashboardHeader 
+          trialDaysLeft={headerData.trialDaysLeft}
+          userEmail={headerData.userEmail}
+          subscriptionStatus={headerData.subscriptionStatus}
+          hasTrialLimitations={headerData.hasTrialLimitations}
+        />
+      )}
 
       <main className="flex-1 container mx-auto px-4 py-6 max-w-4xl">
         <div className="bg-richy-black-soft border border-richy-gold/20 rounded-xl p-6 h-[600px] overflow-y-auto mb-4">
