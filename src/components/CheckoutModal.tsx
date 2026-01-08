@@ -21,6 +21,7 @@ interface CheckoutModalProps {
     company_name: string
     phone_number: string
     phone_verified: boolean
+    phone_verification_id?: string
   }
 }
 
