@@ -34,7 +34,7 @@ export async function middleware(request: NextRequest) {
       
       // Si pas de subscription, rediriger vers pricing
       if (!subscription) {
-        return NextResponse.redirect(new URL('/onboarding/pricing', request.url))
+        return NextResponse.redirect(new URL('/register/pricing-choice', request.url))
       }
       
       // Si status invalide (canceled, past_due), rediriger vers pricing
@@ -42,14 +42,14 @@ export async function middleware(request: NextRequest) {
       if (subscription.status === 'canceled' || 
           subscription.status === 'past_due' ||
           (subscription.status === 'pending' && !subscription.stripe_subscription_id)) {
-        return NextResponse.redirect(new URL('/onboarding/pricing', request.url))
+        return NextResponse.redirect(new URL('/register/pricing-choice', request.url))
       }
       
       // Si trial expiré, rediriger vers pricing
       if (subscription.status === 'trialing' && subscription.trial_ends_at) {
         const trialEnd = new Date(subscription.trial_ends_at)
         if (new Date() > trialEnd) {
-          return NextResponse.redirect(new URL('/onboarding/pricing', request.url))
+          return NextResponse.redirect(new URL('/register/pricing-choice', request.url))
         }
       }
       
@@ -62,7 +62,7 @@ export async function middleware(request: NextRequest) {
         } else {
           const trialEnd = new Date(subscription.trial_ends_at)
           if (new Date() > trialEnd) {
-            return NextResponse.redirect(new URL('/onboarding/pricing', request.url))
+            return NextResponse.redirect(new URL('/register/pricing-choice', request.url))
           }
         }
       }
@@ -70,7 +70,7 @@ export async function middleware(request: NextRequest) {
     } catch (error) {
       console.error('Middleware error:', error)
       // En cas d'erreur, rediriger vers pricing pour sécurité
-      return NextResponse.redirect(new URL('/onboarding/pricing', request.url))
+      return NextResponse.redirect(new URL('/register/pricing-choice', request.url))
     }
   }
   
