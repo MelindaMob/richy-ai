@@ -5,11 +5,16 @@
 import { useState } from 'react'
 import Link from 'next/link'
 
+type OnVerifiedPayload = {
+  phone: string
+  verificationId?: string
+}
+
 export default function PhoneVerification({ 
   onVerified,
   initialPhone = ''
 }: { 
-  onVerified: () => void
+  onVerified: (payload: OnVerifiedPayload) => void
   initialPhone?: string
 }) {
   const [step, setStep] = useState<'phone' | 'code' | 'verified'>('phone')
@@ -82,7 +87,10 @@ export default function PhoneVerification({
       
       setStep('verified')
       setTimeout(() => {
-        onVerified()
+        onVerified({
+          phone: data.phone || phone.replace(/\s/g, ''),
+          verificationId: data.verificationId
+        })
       }, 2000)
       
     } catch (err) {

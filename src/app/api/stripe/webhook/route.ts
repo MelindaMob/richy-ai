@@ -4,12 +4,38 @@ import { NextRequest, NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 import Stripe from 'stripe'
 import { createClient } from '@/lib/supabase/admin' // Admin client
+import crypto from 'crypto'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-11-17.clover'
 })
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
+const ENCRYPTION_KEY = process.env.REGISTRATION_ENCRYPTION_KEY || ''
+const IV_LENGTH = 16
+
+function decryptPassword(encrypted: string) {
+  if (!encrypted) return ''
+  if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length < 32) {
+    console.warn('[webhook] REGISTRATION_ENCRYPTION_KEY manquante ou trop courte, on retourne le mot de passe tel quel')
+    return encrypted
+  }
+  const parts = encrypted.split(':')
+  if (parts.length !== 2) {
+    return encrypted
+  }
+  try {
+    const iv = Buffer.from(parts[0], 'hex')
+    const encryptedText = parts[1]
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.slice(0, 32)), iv)
+    let decrypted = decipher.update(encryptedText, 'hex', 'utf8')
+    decrypted += decipher.final('utf8')
+    return decrypted
+  } catch (err) {
+    console.error('[webhook] Erreur de déchiffrement du mot de passe, fallback en clair:', err)
+    return encrypted
+  }
+}
 
 // Vérifier les variables d'environnement au démarrage
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -52,13 +78,104 @@ export async function POST(req: NextRequest) {
         if (session.subscription && typeof session.subscription === 'string') {
           const subscription = await stripe.subscriptions.retrieve(session.subscription)
           
-          const userId = subscription.metadata?.user_id
+          let userId = subscription.metadata?.user_id as string | undefined
           const planType = subscription.metadata?.plan_type || 'direct'
           const isUpgrade = subscription.metadata?.is_upgrade === 'true'
+          const registrationToken = subscription.metadata?.registration_token || session.metadata?.registration_token
           
           console.log(`[webhook] Subscription metadata - userId: ${userId}, planType: ${planType}, isUpgrade: ${isUpgrade}`)
           console.log(`[webhook] Subscription status: ${subscription.status}, trial_end: ${subscription.trial_end}`)
+
+          // Si aucun user_id mais un registration_token est présent, créer le compte maintenant
+          if (!userId && registrationToken) {
+            console.log('[webhook] Aucun user_id, tentative de création via registration_token:', registrationToken)
+            const { data: pendingReg, error: pendingError } = await supabase
+              .from('pending_registrations')
+              .select('*')
+              .eq('token', registrationToken)
+              .maybeSingle()
+
+            if (pendingError) {
+              console.error('[webhook] Erreur récupération pending_registrations:', pendingError)
+            }
+
+            if (pendingReg) {
+              const isExpired = pendingReg.expires_at && new Date(pendingReg.expires_at) < new Date()
+              if (isExpired) {
+                console.warn('[webhook] pending_registration expiré, abandon de la création de compte')
+              } else {
+                // Déchiffrer le mot de passe
+                const decryptedPassword = decryptPassword(pendingReg.password_encrypted || pendingReg.password)
+
+                const { data: createdUser, error: createUserError } = await supabase.auth.admin.createUser({
+                  email: pendingReg.email,
+                  password: decryptedPassword,
+                  email_confirm: true
+                })
+
+                if (createUserError) {
+                  console.error('[webhook] Erreur création user via pending_registrations:', createUserError)
+                } else if (createdUser?.user) {
+                  userId = createdUser.user.id
+                  console.log('[webhook] Utilisateur créé via pending_registrations:', userId)
+
+                  // Créer le profil
+                  const { error: profileError } = await supabase
+                    .from('profiles')
+                    .insert({
+                      id: userId,
+                      email: pendingReg.email,
+                      full_name: pendingReg.full_name || null,
+                      company_name: pendingReg.company_name || null,
+                      phone_number: pendingReg.phone_number
+                    })
+                  if (profileError) {
+                    console.warn('[webhook] Erreur insertion profil:', profileError)
+                  }
+
+                  // Marquer account_created dans phone_verifications
+                  if (pendingReg.phone_verification_id) {
+                    const { error: phoneUpdateError } = await supabase
+                      .from('phone_verifications')
+                      .update({ account_created: true })
+                      .eq('id', pendingReg.phone_verification_id)
+                    if (phoneUpdateError) {
+                      console.warn('[webhook] Erreur update phone_verifications.account_created:', phoneUpdateError)
+                    }
+                  }
+
+                  // Nettoyer l'entrée temporaire
+                  const { error: deletePendingError } = await supabase
+                    .from('pending_registrations')
+                    .delete()
+                    .eq('token', registrationToken)
+                  if (deletePendingError) {
+                    console.warn('[webhook] Erreur suppression pending_registrations:', deletePendingError)
+                  }
+
+                  // Mettre à jour la subscription Stripe avec le user_id pour cohérence
+                  try {
+                    await stripe.subscriptions.update(subscription.id, {
+                      metadata: {
+                        ...subscription.metadata,
+                        user_id: userId
+                      }
+                    })
+                  } catch (stripeUpdateError) {
+                    console.warn('[webhook] Impossible de mettre à jour la metadata user_id sur Stripe:', stripeUpdateError)
+                  }
+                }
+              }
+            } else {
+              console.warn('[webhook] Aucun pending_registration trouvé pour registration_token:', registrationToken)
+            }
+          }
           
+          if (!userId) {
+            console.warn('[webhook] Aucun user_id après tentative de résolution, abandon du traitement subscription')
+            break
+          }
+
           const hasTrialEnd = subscription.trial_end && subscription.trial_end > Math.floor(Date.now() / 1000)
           // C'est un trial si planType === 'trial' OU si il y a un trial_end dans le futur
           const isTrial = planType === 'trial' || (hasTrialEnd && planType !== 'direct')

@@ -114,6 +114,10 @@ export async function POST(req: NextRequest) {
     if (verification.attempts !== undefined) {
       updateData.attempts = (verification.attempts || 0) + 1
     }
+    // Associer explicitement le flag account_created à false si la colonne existe
+    if (Object.prototype.hasOwnProperty.call(verification, 'account_created')) {
+      updateData.account_created = false
+    }
     
     const { error: updateError } = await supabase
       .from('phone_verifications')
@@ -139,7 +143,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      verified: true
+      verified: true,
+      verificationId: verification.id,
+      phone: normalized
     })
 
   } catch (error: any) {

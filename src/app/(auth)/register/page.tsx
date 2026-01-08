@@ -345,7 +345,7 @@ export default function RegisterPage() {
               </button>
               <PhoneVerification
                 initialPhone={formData.phone_number}
-                onVerified={async () => {
+                onVerified={async ({ phone, verificationId }) => {
                   setPhoneVerified(true)
                   
                   // IMPORTANT: Ne PAS créer le compte ici
@@ -357,7 +357,8 @@ export default function RegisterPage() {
                       password: formData.password,
                       full_name: formData.full_name,
                       company_name: formData.company_name,
-                      phone_number: formData.phone_number,
+                      phone_number: phone || formData.phone_number,
+                      phone_verification_id: verificationId,
                       phone_verified: true
                     }
                     

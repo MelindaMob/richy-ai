@@ -54,14 +54,15 @@ export async function POST(req: NextRequest) {
     // Vérifier TOUS les enregistrements avec ce hash (pas seulement verified=true)
     const { data: allVerifications } = await supabase
       .from('phone_verifications')
-      .select('verified, phone_hash, created_at')
+      .select('verified, phone_hash, created_at, account_created')
       .eq('phone_hash', phoneHash)
       .order('created_at', { ascending: false })
 
-    // Si un enregistrement est déjà vérifié, bloquer
-    const verifiedExists = allVerifications?.some(v => v.verified === true)
-    if (verifiedExists) {
-      console.log('[phone-verify/send] Numéro déjà vérifié (verified=true):', phoneHash)
+    // Si un enregistrement est déjà vérifié ET associé à un compte, bloquer
+    const hasAccountCreatedField = allVerifications && allVerifications.length > 0 && Object.prototype.hasOwnProperty.call(allVerifications[0], 'account_created')
+    const verifiedAndLinked = allVerifications?.some(v => v.verified === true && (!hasAccountCreatedField || v.account_created === true))
+    if (verifiedAndLinked) {
+      console.log('[phone-verify/send] Numéro déjà vérifié et lié à un compte:', phoneHash)
       return NextResponse.json({
         error: 'Ce numéro a déjà été vérifié et est lié à un compte. Connecte-toi ou utilise un autre numéro.',
         alreadyUsed: true

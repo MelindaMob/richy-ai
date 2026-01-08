@@ -2,15 +2,35 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@/lib/supabase/admin'
+import crypto from 'crypto'
 import Stripe from 'stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-11-17.clover'
 })
 
+const ENCRYPTION_KEY = process.env.REGISTRATION_ENCRYPTION_KEY || ''
+const IV_LENGTH = 16
+
+function encryptPassword(password: string) {
+  // Si la clé est manquante ou invalide, on retourne le mot de passe en clair (fallback) mais on loggue
+  if (!ENCRYPTION_KEY || ENCRYPTION_KEY.length < 32) {
+    console.warn('[create-checkout-session] REGISTRATION_ENCRYPTION_KEY manquante ou trop courte, fallback en clair')
+    return { encrypted: password, usedFallback: true }
+  }
+
+  const iv = crypto.randomBytes(IV_LENGTH)
+  const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.slice(0, 32)), iv)
+  let encrypted = cipher.update(password, 'utf8', 'hex')
+  encrypted += cipher.final('hex')
+  return { encrypted: `${iv.toString('hex')}:${encrypted}`, usedFallback: false }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
+    const adminSupabase = createAdminClient()
     
     const { 
       priceType, // 'trial' ou 'direct'
@@ -18,171 +38,161 @@ export async function POST(req: NextRequest) {
       pendingRegistration // Infos d'inscription si le compte n'existe pas encore
     } = await req.json()
 
-    let user
-    
-    // Si pendingRegistration existe, créer le compte Supabase d'abord
-    if (pendingRegistration) {
-      console.log('[create-checkout-session] Création du compte Supabase avant checkout')
-      console.log('[create-checkout-session] Email:', pendingRegistration.email)
-      console.log('[create-checkout-session] NEXT_PUBLIC_APP_URL:', process.env.NEXT_PUBLIC_APP_URL)
-      
-      // Vérifier que NEXT_PUBLIC_APP_URL est défini
-      if (!process.env.NEXT_PUBLIC_APP_URL) {
-        console.error('[create-checkout-session] NEXT_PUBLIC_APP_URL non défini')
+    const { data: { user: existingUser } } = await supabase.auth.getUser()
+    const isNewRegistration = !!pendingRegistration && !existingUser
+
+    // Vérifier NEXT_PUBLIC_APP_URL
+    if (!process.env.NEXT_PUBLIC_APP_URL) {
+      console.error('[create-checkout-session] NEXT_PUBLIC_APP_URL non défini')
+      return NextResponse.json({ 
+        error: 'Configuration serveur manquante. Veuillez contacter le support.' 
+      }, { status: 500 })
+    }
+
+    let user = existingUser
+    let customerId: string | undefined
+    let existingSub: any = null
+    let finalPriceType = isUpgrade ? 'direct' : priceType
+    let registrationToken: string | null = null
+
+    if (isNewRegistration) {
+      console.log('[create-checkout-session] Nouveau flux sans création de compte préalable (pending_registration)')
+      const registration = pendingRegistration || {}
+
+      // Validations de base
+      const email = (registration.email || '').trim().toLowerCase()
+      const password = registration.password
+      const phoneNumber = registration.phone_number
+      const phoneVerificationId = registration.phone_verification_id
+
+      if (!email || !password || !phoneNumber || !phoneVerificationId) {
         return NextResponse.json({ 
-          error: 'Configuration serveur manquante. Veuillez contacter le support.' 
-        }, { status: 500 })
+          error: 'Données incomplètes. Merci de recommencer l\'inscription.' 
+        }, { status: 400 })
       }
-      
-      // Vérifier si l'email existe déjà dans profiles
+
+      // Vérifier email dans profiles
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('id, email')
-        .eq('email', pendingRegistration.email.toLowerCase())
+        .eq('email', email)
         .maybeSingle()
       
       if (existingProfile) {
-        console.log('[create-checkout-session] Email déjà utilisé dans profiles:', pendingRegistration.email)
+        console.log('[create-checkout-session] Email déjà utilisé dans profiles:', email)
         return NextResponse.json({ 
           error: 'Cet email est déjà enregistré. Connecte-toi ou utilise un autre email.',
           emailAlreadyUsed: true
         }, { status: 400 })
       }
-      
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: pendingRegistration.email,
-        password: pendingRegistration.password,
-        options: {
-          emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/payment-success`,
-          data: {
-            full_name: pendingRegistration.full_name,
-            company_name: pendingRegistration.company_name
-          }
-        }
+
+      // Vérifier email dans auth.users via admin
+      const { data: usersList, error: listError } = await adminSupabase.auth.admin.listUsers({
+        page: 1,
+        perPage: 1000
       })
 
-      if (signUpError) {
-        console.error('[create-checkout-session] Erreur création compte:', signUpError)
-        
-        // Si l'utilisateur existe déjà, retourner une erreur claire
-        if (signUpError.message?.includes('already registered') || 
-            signUpError.message?.includes('User already registered') ||
-            signUpError.message?.includes('already exists')) {
-          console.log('[create-checkout-session] Email déjà enregistré:', pendingRegistration.email)
-          return NextResponse.json({ 
-            error: 'Cet email est déjà enregistré. Connecte-toi ou utilise un autre email.',
-            emailAlreadyUsed: true
-          }, { status: 400 })
-        }
-        
-        // Retourner le message d'erreur exact de Supabase
+      if (listError) {
+        console.error('[create-checkout-session] Erreur vérif email admin:', listError)
+      }
+
+      const emailExistsInAuth = usersList?.users?.some(u => u.email?.toLowerCase() === email)
+      if (emailExistsInAuth) {
+        console.log('[create-checkout-session] Email déjà utilisé dans auth.users:', email)
         return NextResponse.json({ 
-          error: signUpError.message || 'Erreur lors de la création du compte. Veuillez réessayer.' 
+          error: 'Cet email est déjà enregistré. Connecte-toi ou utilise un autre email.',
+          emailAlreadyUsed: true
         }, { status: 400 })
-      } else {
-        if (!signUpData.user) {
-          return NextResponse.json({ 
-            error: 'Impossible de créer le compte. Veuillez réessayer.' 
-          }, { status: 400 })
-        }
-
-        user = signUpData.user
-        console.log('[create-checkout-session] Compte créé avec succès:', user.id)
       }
 
-      // Mettre à jour le profil avec les infos supplémentaires
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          full_name: pendingRegistration.full_name,
-          company_name: pendingRegistration.company_name,
-          phone_number: pendingRegistration.phone_number
+      // Vérifier phone_verifications
+      const { data: verification } = await supabase
+        .from('phone_verifications')
+        .select('id, verified, account_created')
+        .eq('id', phoneVerificationId)
+        .maybeSingle()
+
+      if (!verification || verification.verified !== true) {
+        return NextResponse.json({ 
+          error: 'La vérification du numéro a expiré. Merci de recommencer.' 
+        }, { status: 400 })
+      }
+
+      const hasAccountCreatedField = verification && Object.prototype.hasOwnProperty.call(verification, 'account_created')
+      if (hasAccountCreatedField && verification.account_created === true) {
+        return NextResponse.json({
+          error: 'Ce numéro est déjà lié à un compte. Connecte-toi avec ce numéro ou utilise un autre numéro.',
+          alreadyUsed: true
+        }, { status: 400 })
+      }
+
+      // Chiffrer le mot de passe (ou fallback clair)
+      const { encrypted, usedFallback } = encryptPassword(password)
+      if (usedFallback) {
+        console.warn('[create-checkout-session] Password stocké en clair temporairement (clé manquante)')
+      }
+
+      // Créer un token de registration et insérer dans pending_registrations
+      registrationToken = crypto.randomUUID()
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
+      const { error: pendingError } = await supabase
+        .from('pending_registrations')
+        .insert({
+          token: registrationToken,
+          email,
+          password_encrypted: encrypted,
+          full_name: registration.full_name || null,
+          company_name: registration.company_name || null,
+          phone_number: phoneNumber,
+          phone_verification_id: phoneVerificationId,
+          plan_type: finalPriceType || 'trial',
+          expires_at: expiresAt
         })
-        .eq('id', user.id)
 
-      if (profileError) {
-        console.error('[create-checkout-session] Erreur mise à jour profil:', profileError)
-        // Ne pas bloquer le processus si la mise à jour du profil échoue
+      if (pendingError) {
+        console.error('[create-checkout-session] Erreur insert pending_registrations:', pendingError)
+        return NextResponse.json({
+          error: 'Erreur lors de la préparation de l\'inscription. Réessaie.'
+        }, { status: 500 })
       }
-      
-      // Note: Le sessionStorage sera nettoyé côté client après le checkout réussi
-      // On retourne un flag pour indiquer que le compte vient d'être créé
-    } else {
-      // Auth check pour utilisateur existant
-      const { data: { user: existingUser } } = await supabase.auth.getUser()
-      if (!existingUser) {
-        return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
-      }
-      user = existingUser
-    }
 
-    // Check si déjà abonné
-    const { data: existingSub } = await supabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
-
-    // Si upgrade, annuler l'ancien
-    if (isUpgrade && existingSub?.stripe_subscription_id) {
-      await stripe.subscriptions.cancel(existingSub.stripe_subscription_id, {
-        prorate: false,
-        invoice_now: false
-      })
-    }
-
-    // Créer ou récupérer le customer Stripe
-    // IMPORTANT: Le customer Stripe sera créé ici, pas avant
-    let customerId = existingSub?.stripe_customer_id
-    let customerExists = false
-    
-    if (!customerId) {
-      // Pas de customer ID en base, créer un nouveau customer Stripe
-      // C'est ici que le client Stripe est créé, en même temps que le checkout
-      console.log('[create-checkout-session] Création du client Stripe pour user:', user.id)
-      
+      // Créer un customer Stripe avec uniquement l'email
+      console.log('[create-checkout-session] Création client Stripe pour pending_registration')
       const customer = await stripe.customers.create({
-        email: user.email!,
+        email,
         metadata: {
-          user_id: user.id
+          registration_token: registrationToken
         },
         balance: 0
       })
       customerId = customer.id
-      customerExists = true
-      
-      console.log('[create-checkout-session] Client Stripe créé:', customerId)
-      
-      // Sauvegarder le customer ID (mais pas de subscription encore, elle sera créée par le webhook)
-      await supabase.from('subscriptions').upsert({
-        user_id: user.id,
-        stripe_customer_id: customerId,
-        status: 'pending'
-      }, {
-        onConflict: 'user_id'
-      })
     } else {
-      // Vérifier si le customer existe réellement dans Stripe
-      try {
-        const customer = await stripe.customers.retrieve(customerId)
-        
-        // Vérifier si le customer n'a pas été supprimé
-        if (customer.deleted) {
-          throw new Error('Customer deleted')
-        }
-        
-        customerExists = true
-        
-        // Réinitialiser la balance à 0 si nécessaire
-        if ((customer as any).balance !== 0) {
-          await stripe.customers.update(customerId, {
-            balance: 0
-          })
-        }
-      } catch (error: any) {
-        // Si le customer n'existe pas dans Stripe (404 ou deleted), créer un nouveau
-        console.log(`[create-checkout-session] Customer ${customerId} not found in Stripe, creating new one`)
-        
+      if (!existingUser) {
+        return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
+      }
+      user = existingUser
+
+      // Check si déjà abonné
+      const { data: existingSubData } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .single()
+      existingSub = existingSubData
+
+      // Si upgrade, annuler l'ancien
+      if (isUpgrade && existingSub?.stripe_subscription_id) {
+        await stripe.subscriptions.cancel(existingSub.stripe_subscription_id, {
+          prorate: false,
+          invoice_now: false
+        })
+      }
+
+      // Créer ou récupérer le customer Stripe
+      customerId = existingSub?.stripe_customer_id
+      if (!customerId) {
+        console.log('[create-checkout-session] Création du client Stripe pour user:', user.id)
         const customer = await stripe.customers.create({
           email: user.email!,
           metadata: {
@@ -191,14 +201,41 @@ export async function POST(req: NextRequest) {
           balance: 0
         })
         customerId = customer.id
-        customerExists = true
-        
-        // Mettre à jour la base de données avec le nouveau customer ID
+
         await supabase.from('subscriptions').upsert({
           user_id: user.id,
           stripe_customer_id: customerId,
-          status: existingSub?.status || 'pending'
+          status: 'pending'
+        }, {
+          onConflict: 'user_id'
         })
+      } else {
+        try {
+          const customer = await stripe.customers.retrieve(customerId)
+          if ((customer as Stripe.Customer).deleted) {
+            throw new Error('Customer deleted')
+          }
+
+          if ((customer as any).balance !== 0) {
+            await stripe.customers.update(customerId, { balance: 0 })
+          }
+        } catch (error: any) {
+          console.log(`[create-checkout-session] Customer ${customerId} not found in Stripe, creating new one`)
+          const customer = await stripe.customers.create({
+            email: user.email!,
+            metadata: {
+              user_id: user.id
+            },
+            balance: 0
+          })
+          customerId = customer.id
+
+          await supabase.from('subscriptions').upsert({
+            user_id: user.id,
+            stripe_customer_id: customerId,
+            status: existingSub?.status || 'pending'
+          })
+        }
       }
     }
 
@@ -212,9 +249,6 @@ export async function POST(req: NextRequest) {
         error: 'Configuration Stripe manquante. Veuillez contacter le support.' 
       }, { status: 500 })
     }
-
-    // Si c'est un upgrade, forcer priceType à 'direct' et ne pas mettre de trial
-    const finalPriceType = isUpgrade ? 'direct' : priceType
 
     // Créer la session (pour embedded checkout)
     const session = await stripe.checkout.sessions.create({
@@ -239,16 +273,20 @@ export async function POST(req: NextRequest) {
         ...(finalPriceType === 'trial' && !isUpgrade && {
           trial_period_days: 3,
         }),
-        // Si c'est un upgrade, ne pas mettre de trial
         metadata: {
-          user_id: user.id,
+          ...(user?.id ? { user_id: user.id } : {}),
           plan_type: finalPriceType,
-          is_upgrade: isUpgrade.toString()
+          is_upgrade: isUpgrade.toString(),
+          ...(registrationToken ? { registration_token: registrationToken } : {})
         }
+      },
+      metadata: {
+        ...(registrationToken ? { registration_token: registrationToken } : {}),
+        plan_type: finalPriceType
       }
     })
     
-    console.log(`[create-checkout-session] Session created: ${session.id}, plan_type: ${finalPriceType}, is_upgrade: ${isUpgrade}`)
+    console.log(`[create-checkout-session] Session created: ${session.id}, plan_type: ${finalPriceType}, is_upgrade: ${isUpgrade}, registration_token: ${registrationToken}`)
 
     return NextResponse.json({
       clientSecret: session.client_secret
