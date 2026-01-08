@@ -263,35 +263,13 @@ export default async function DashboardPage() {
       {/* Footer */}
       <footer className="border-t border-richy-gold/20 bg-richy-black/50 backdrop-blur-sm mt-12">
         <div className="container mx-auto px-4 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Brand */}
             <div>
               <h3 className="font-display text-2xl text-richy-gold mb-4">RICHY.AI</h3>
               <p className="text-gray-400 text-sm">
                 Ton assistant IA pour valider et construire ton SaaS. Pas de bullshit, que du concret.
               </p>
-            </div>
-
-            {/* Links */}
-            <div>
-              <h4 className="text-white font-semibold mb-4">Liens utiles</h4>
-              <ul className="space-y-2">
-                <li>
-                  <Link href="/privacy" className="text-gray-400 hover:text-richy-gold transition-colors text-sm">
-                    Politique de confidentialité
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/terms" className="text-gray-400 hover:text-richy-gold transition-colors text-sm">
-                    Conditions générales de vente
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/legal" className="text-gray-400 hover:text-richy-gold transition-colors text-sm">
-                    Mentions légales
-                  </Link>
-                </li>
-              </ul>
             </div>
 
             {/* Support */}

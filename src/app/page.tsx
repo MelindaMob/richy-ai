@@ -1,5 +1,31 @@
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: "RICHY.AI - Ton assistant IA pour valider et construire ton SaaS",
+  description: "Valide et construis ton SaaS avec l'IA. Pas de bullshit, que du concret.",
+  openGraph: {
+    title: "RICHY.AI - Ton assistant IA pour valider et construire ton SaaS",
+    description: "Valide et construis ton SaaS avec l'IA. Pas de bullshit, que du concret.",
+    type: "website",
+    siteName: "RICHY.AI",
+    images: [
+      {
+        url: "/logo-richy.png",
+        width: 1200,
+        height: 630,
+        alt: "RICHY.AI",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "RICHY.AI - Ton assistant IA pour valider et construire ton SaaS",
+    description: "Valide et construis ton SaaS avec l'IA. Pas de bullshit, que du concret.",
+    images: ["/logo-richy.png"],
+  },
+}
 
 export default function Home() {
   return (
@@ -13,9 +39,12 @@ export default function Home() {
       {/* Header */}
       <header className="container mx-auto px-4 py-6 relative z-10">
         <div className="flex items-center justify-between">
-          <div className="font-display text-2xl text-richy-gold">
-            RICHY.AI
-          </div>
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/logo-richy.png" alt="RICHY.AI" className="h-8 w-8" />
+            <span className="font-display text-2xl text-richy-gold">
+              RICHY.AI
+            </span>
+          </Link>
           <div className="flex items-center gap-4">
             <Link 
               href="/login"
