@@ -48,6 +48,7 @@ export async function middleware(request: NextRequest) {
           return NextResponse.redirect(new URL('/register/pricing-choice', request.url))
         }
         // Sinon, laisser passer (le webhook va créer la subscription)
+        return response
       }
       
       // Si status invalide (canceled, past_due), rediriger vers pricing
