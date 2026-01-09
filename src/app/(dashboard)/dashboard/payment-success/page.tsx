@@ -59,7 +59,11 @@ function PaymentSuccessContent() {
         // IMPORTANT: Cette étape doit TOUJOURS être exécutée avant toute redirection
         console.log('[payment-success] 🔄 Synchronisation de la subscription AVANT redirection')
         const response = await fetch('/api/stripe/sync-subscription', {
-          method: 'POST'
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: createAccountData?.userId || undefined // Passer userId si disponible (pour nouvelles inscriptions)
+          })
         })
         const data = await response.json()
         console.log('[payment-success] Subscription synced:', data)

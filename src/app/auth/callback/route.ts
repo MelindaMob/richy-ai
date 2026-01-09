@@ -44,6 +44,18 @@ export async function GET(req: NextRequest) {
 
       console.log('[auth/callback] ✅ Utilisateur connecté:', user.id)
       
+      // Vérifier si une subscription existe pour cet utilisateur
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .maybeSingle()
+      
+      console.log('[auth/callback] 🔴 Subscription après connexion:', subscription ? {
+        plan_type: subscription.plan_type,
+        status: subscription.status
+      } : 'AUCUNE SUBSCRIPTION TROUVÉE')
+      
       // Rediriger vers la destination souhaitée
       return NextResponse.redirect(new URL(redirectTo, req.url))
     } catch (error: any) {

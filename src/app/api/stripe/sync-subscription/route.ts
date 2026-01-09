@@ -14,26 +14,40 @@ export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
     
+    // Essayer de récupérer le userId depuis le body (pour les nouvelles inscriptions)
+    const body = await req.json().catch(() => ({}))
+    const userIdFromBody = body.userId
+    
     // Auth check
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     
-    if (authError) {
-      console.error('[sync-subscription] Auth error:', authError)
-      return NextResponse.json({ error: 'Erreur d\'authentification', details: authError.message }, { status: 401 })
+    // Si pas d'utilisateur connecté mais userId fourni dans le body, utiliser celui-ci
+    let finalUserId: string | null = null
+    if (user) {
+      finalUserId = user.id
+      console.log('[sync-subscription] 🔴 User authenticated:', {
+        user_id: user.id,
+        email: user.email,
+        session_active: true
+      })
+    } else if (userIdFromBody) {
+      finalUserId = userIdFromBody
+      console.log('[sync-subscription] ⚠️ Pas de session active, utilisation userId depuis body:', userIdFromBody)
+    } else {
+      console.error('[sync-subscription] ❌ No user found and no userId in body')
+      return NextResponse.json({ error: 'Non autorisé - aucune session et aucun userId fourni' }, { status: 401 })
     }
     
-    if (!user) {
+    if (!finalUserId) {
       console.error('[sync-subscription] No user found')
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
-    
-    console.log('[sync-subscription] User authenticated:', user.id, user.email)
 
     // Récupérer la subscription depuis la DB (pour avoir le customer_id)
     let { data: subscription } = await supabase
       .from('subscriptions')
       .select('*')
-      .eq('user_id', user.id)
+      .eq('user_id', finalUserId)
       .maybeSingle()
     
     // #region agent log
@@ -55,7 +69,7 @@ export async function POST(req: NextRequest) {
 
     // Si pas de customer_id, chercher dans Stripe
     if (!customerId) {
-      console.log(`[sync-subscription] No customer_id in DB, searching in Stripe for user ${user.id}, email: ${user.email}`)
+      console.log(`[sync-subscription] No customer_id in DB, searching in Stripe for user ${finalUserId}`)
       
       let customer: Stripe.Customer | null = null
       
@@ -84,7 +98,7 @@ export async function POST(req: NextRequest) {
         })
         
         for (const c of allCustomers.data) {
-          if (c.metadata?.user_id === user.id) {
+          if (c.metadata?.user_id === finalUserId) {
             customer = c
             console.log(`[sync-subscription] Found customer by metadata user_id: ${customer.id}`)
             break
@@ -150,7 +164,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!stripeSubscription) {
-      console.error(`[sync-subscription] No subscription found in Stripe for user ${user.id}, email: ${user.email}`)
+      console.error(`[sync-subscription] No subscription found in Stripe for user ${finalUserId}`)
       
       // IMPORTANT: Même si on ne trouve pas de subscription, mettre à jour le profil avec stripe_customer_id
       // pour que le middleware laisse passer (le webhook créera la subscription plus tard)
@@ -159,7 +173,7 @@ export async function POST(req: NextRequest) {
         const { error: profileUpdateError } = await supabase
           .from('profiles')
           .update({ stripe_customer_id: customerId })
-          .eq('id', user.id)
+          .eq('id', finalUserId)
         
         if (profileUpdateError) {
           console.error('[sync-subscription] Erreur mise à jour profil avec stripe_customer_id:', profileUpdateError)
@@ -170,8 +184,8 @@ export async function POST(req: NextRequest) {
       
       return NextResponse.json({ 
         error: 'Aucune subscription trouvée dans Stripe. Vérifie que tu as bien complété le paiement.',
-        userId: user.id,
-        email: user.email,
+        userId: finalUserId,
+        email: user?.email || 'N/A',
         customerFound: !!customerId,
         profileUpdated: !!customerId // Indique que le profil a été mis à jour
       }, { status: 404 })
@@ -198,7 +212,7 @@ export async function POST(req: NextRequest) {
     fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:183',message:'H5/H6: isPremium calculé',data:{isPremium,isUpgradeFromMetadata,planTypeIsDirect:planTypeFromMetadata==='direct',condition3:!hasTrialEnd&&stripeSubscription.status==='active'&&planTypeFromMetadata!=='trial'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
     // #endregion
 
-    console.log(`[sync-subscription] User: ${user.id}, Status: ${stripeSubscription.status}, Trial end: ${stripeSubscription.trial_end}`)
+    console.log(`[sync-subscription] User: ${finalUserId}, Status: ${stripeSubscription.status}, Trial end: ${stripeSubscription.trial_end}`)
     console.log(`[sync-subscription] Metadata - plan_type: ${planTypeFromMetadata}, is_upgrade: ${isUpgradeFromMetadata}`)
     console.log(`[sync-subscription] Is Premium: ${isPremium}`)
 
@@ -238,7 +252,7 @@ export async function POST(req: NextRequest) {
     // #endregion
     
     const subscriptionData = {
-      user_id: user.id,
+      user_id: finalUserId,
       stripe_customer_id: typeof stripeSubscription.customer === 'string' 
         ? stripeSubscription.customer 
         : stripeSubscription.customer.id,
@@ -263,7 +277,7 @@ export async function POST(req: NextRequest) {
     // Supprimer les anciennes subscriptions pour cet utilisateur (garder seulement la plus récente)
     await supabase.from('subscriptions')
       .delete()
-      .eq('user_id', user.id)
+      .eq('user_id', finalUserId)
       .neq('stripe_subscription_id', stripeSubscription.id)
     
     // #region agent log
@@ -282,13 +296,32 @@ export async function POST(req: NextRequest) {
     console.log('[sync-subscription] 🔴 APRÈS UPSERT - Données retournées:', JSON.stringify(upsertedData, null, 2))
     if (upsertedData && upsertedData.length > 0) {
       console.log('[sync-subscription] 🔴 plan_type dans la DB après upsert:', upsertedData[0]?.plan_type)
+      console.log('[sync-subscription] 🔴 user_id dans la DB après upsert:', upsertedData[0]?.user_id)
+    } else {
+      console.log('[sync-subscription] ⚠️ Aucune donnée retournée par l\'upsert !')
     }
     // #endregion
 
     if (upsertError) {
-      console.error('[sync-subscription] Error upserting subscription:', upsertError)
+      console.error('[sync-subscription] ❌ Error upserting subscription:', upsertError)
       throw upsertError
     }
+    
+    // Vérifier que la subscription a bien été insérée en la relisant
+    const { data: verifySubscription, error: verifyError } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', finalUserId)
+      .maybeSingle()
+    
+    // #region agent log
+    console.log('[sync-subscription] 🔴 VÉRIFICATION POST-UPSERT:', {
+      subscription_found: !!verifySubscription,
+      plan_type: verifySubscription?.plan_type,
+      user_id: verifySubscription?.user_id,
+      verify_error: verifyError?.message
+    })
+    // #endregion
 
     // IMPORTANT: Mettre à jour le profil avec stripe_customer_id pour que le middleware laisse passer
     const stripeCustomerId = typeof stripeSubscription.customer === 'string' 

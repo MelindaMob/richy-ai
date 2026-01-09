@@ -11,6 +11,13 @@ export default async function DashboardPage() {
   // Vérifier l'authentification
   const { data: { user }, error } = await supabase.auth.getUser()
   
+  // #region agent log
+  console.log('🔴 [DASHBOARD SERVER] User auth:', user ? {
+    id: user.id,
+    email: user.email
+  } : 'NO USER')
+  // #endregion
+  
   if (!user) {
     redirect('/login')
   }
@@ -22,12 +29,35 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
+  // #region agent log
+  console.log('🔴 [DASHBOARD SERVER] Profile:', profile ? {
+    id: profile.id,
+    email: profile.email,
+    subscription_status: profile.subscription_status,
+    stripe_customer_id: profile.stripe_customer_id
+  } : 'NO PROFILE')
+  // #endregion
+
   // Récupérer la subscription depuis subscriptions table
-  const { data: subscription } = await supabase
+  const { data: subscription, error: subscriptionError } = await supabase
     .from('subscriptions')
     .select('*')
     .eq('user_id', user.id)
     .maybeSingle()
+  
+  // #region agent log
+  console.log('🔴 [DASHBOARD SERVER] Subscription query:', {
+    user_id: user.id,
+    subscription_found: !!subscription,
+    subscription_error: subscriptionError?.message,
+    subscription_data: subscription ? {
+      id: subscription.id,
+      plan_type: subscription.plan_type,
+      status: subscription.status,
+      stripe_subscription_id: subscription.stripe_subscription_id
+    } : null
+  })
+  // #endregion
 
   // #region agent log - Dashboard subscription data
   console.log('🔴 [DASHBOARD] Subscription data from DB:', JSON.stringify({
