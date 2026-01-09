@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardHeader } from './dashboard-header'
 import LockedAgentCard from './locked-agent-card'
+import { DashboardDebugLogs } from '@/components/DashboardDebugLogs'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -27,6 +28,19 @@ export default async function DashboardPage() {
     .select('*')
     .eq('user_id', user.id)
     .maybeSingle()
+
+  // #region agent log - Dashboard subscription data
+  console.log('🔴 [DASHBOARD] Subscription data from DB:', JSON.stringify({
+    subscription_id: subscription?.id,
+    plan_type: subscription?.plan_type,
+    status: subscription?.status,
+    trial_ends_at: subscription?.trial_ends_at,
+    trial_limitations: subscription?.trial_limitations,
+    stripe_subscription_id: subscription?.stripe_subscription_id,
+    stripe_customer_id: subscription?.stripe_customer_id,
+    created_at: subscription?.created_at
+  }, null, 2))
+  // #endregion
 
   // Calculer les jours restants d'essai depuis subscriptions
   let trialDaysLeft = 0
@@ -82,8 +96,28 @@ export default async function DashboardPage() {
 
   const totalConversations = conversations?.length || 0
 
+  // #region agent log - Dashboard final values
+  console.log('🔴 [DASHBOARD] Final computed values:', JSON.stringify({
+    isTrialPlan,
+    isCurrentlyTrial,
+    hasTrialLimitations,
+    subscriptionStatus,
+    trialDaysLeft,
+    profile_subscription_status: profile?.subscription_status
+  }, null, 2))
+  // #endregion
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft">
+      {/* Debug Logs Component */}
+      <DashboardDebugLogs
+        subscription={subscription}
+        hasTrialLimitations={hasTrialLimitations}
+        subscriptionStatus={subscriptionStatus}
+        trialDaysLeft={trialDaysLeft}
+        isTrialPlan={isTrialPlan}
+      />
+      
       {/* Header */}
       <DashboardHeader 
         trialDaysLeft={trialDaysLeft}

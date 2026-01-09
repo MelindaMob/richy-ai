@@ -35,6 +35,14 @@ export async function POST(req: NextRequest) {
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle()
+    
+    // #region agent log
+    console.log('[sync-subscription] 🔴 Subscription existante dans DB:', subscription ? {
+      plan_type: subscription.plan_type,
+      status: subscription.status,
+      stripe_subscription_id: subscription.stripe_subscription_id
+    } : 'aucune')
+    // #endregion
 
     let stripeSubscription: Stripe.Subscription | null = null
     let customerId: string | null = null
@@ -195,17 +203,27 @@ export async function POST(req: NextRequest) {
     console.log(`[sync-subscription] Is Premium: ${isPremium}`)
 
     // Déterminer le plan_type depuis les metadata Stripe (priorité absolue)
-    // Si plan_type est défini dans les metadata, l'utiliser directement
-    // Sinon, déduire depuis isPremium
+    // IMPORTANT: Si plan_type n'est pas dans les metadata, on doit le déduire depuis trial_end
+    // et NON depuis isPremium (qui peut être incorrect)
     let finalPlanType: 'trial' | 'direct'
+    
     if (planTypeFromMetadata === 'trial' || planTypeFromMetadata === 'direct') {
       // Si plan_type est explicitement défini dans les metadata, l'utiliser
       finalPlanType = planTypeFromMetadata
-      console.log(`[sync-subscription] Plan type depuis metadata: ${finalPlanType}`)
+      console.log(`[sync-subscription] ✅ Plan type depuis metadata: ${finalPlanType}`)
+    } else if (subscription?.plan_type === 'trial' || subscription?.plan_type === 'direct') {
+      // Si plan_type n'est pas dans les metadata mais existe dans la DB, le conserver
+      // (le webhook l'a probablement déjà défini correctement)
+      finalPlanType = subscription.plan_type
+      console.log(`[sync-subscription] ⚠️ plan_type manquant dans metadata, conservation du plan_type existant dans DB: ${finalPlanType}`)
+    } else if (hasTrialEnd) {
+      // Si il y a un trial_end dans le futur, c'est un trial
+      finalPlanType = 'trial'
+      console.log(`[sync-subscription] ⚠️ plan_type manquant dans metadata, déduit depuis trial_end (futur): ${finalPlanType}`)
     } else {
-      // Si plan_type n'est pas dans les metadata, déduire depuis isPremium
+      // Dernier recours: déduire depuis isPremium (mais ce n'est pas fiable)
       finalPlanType = isPremium ? 'direct' : 'trial'
-      console.log(`[sync-subscription] Plan type déduit depuis isPremium: ${finalPlanType}`)
+      console.log(`[sync-subscription] ⚠️ plan_type déduit depuis isPremium (dernier recours): ${finalPlanType}`)
     }
     
     // #region agent log
@@ -248,11 +266,24 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id)
       .neq('stripe_subscription_id', stripeSubscription.id)
     
-    const { error: upsertError } = await supabase
+    // #region agent log
+    console.log('[sync-subscription] 🔴 AVANT UPSERT - subscriptionData:', JSON.stringify(subscriptionData, null, 2))
+    console.log('[sync-subscription] 🔴 plan_type qui sera inséré:', subscriptionData.plan_type)
+    // #endregion
+    
+    const { error: upsertError, data: upsertedData } = await supabase
       .from('subscriptions')
       .upsert(subscriptionData, {
         onConflict: 'user_id'
       })
+      .select()
+
+    // #region agent log
+    console.log('[sync-subscription] 🔴 APRÈS UPSERT - Données retournées:', JSON.stringify(upsertedData, null, 2))
+    if (upsertedData && upsertedData.length > 0) {
+      console.log('[sync-subscription] 🔴 plan_type dans la DB après upsert:', upsertedData[0]?.plan_type)
+    }
+    // #endregion
 
     if (upsertError) {
       console.error('[sync-subscription] Error upserting subscription:', upsertError)
