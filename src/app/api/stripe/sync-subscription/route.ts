@@ -71,23 +71,39 @@ export async function POST(req: NextRequest) {
     if (!customerId) {
       console.log(`[sync-subscription] No customer_id in DB, searching in Stripe for user ${finalUserId}`)
       
+      // Récupérer l'email depuis le profil si user n'est pas disponible
+      let userEmail: string | null = null
+      if (user?.email) {
+        userEmail = user.email
+      } else {
+        // Récupérer l'email depuis le profil
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', finalUserId)
+          .maybeSingle()
+        userEmail = profile?.email || null
+      }
+      
       let customer: Stripe.Customer | null = null
       
-      // Méthode 1: Chercher le customer Stripe par email (normalisé)
-      const normalizedEmail = user.email!.trim().toLowerCase()
-      console.log(`[sync-subscription] Searching for customer with email: ${normalizedEmail}`)
-      
-      const customersByEmail = await stripe.customers.list({
-        email: normalizedEmail,
-        limit: 100
-      })
+      // Méthode 1: Chercher le customer Stripe par email (normalisé) si email disponible
+      if (userEmail) {
+        const normalizedEmail = userEmail.trim().toLowerCase()
+        console.log(`[sync-subscription] Searching for customer with email: ${normalizedEmail}`)
+        
+        const customersByEmail = await stripe.customers.list({
+          email: normalizedEmail,
+          limit: 100
+        })
 
-      console.log(`[sync-subscription] Found ${customersByEmail.data.length} customer(s) by email`)
+        console.log(`[sync-subscription] Found ${customersByEmail.data.length} customer(s) by email`)
 
-      if (customersByEmail.data.length > 0) {
-        // Prendre le customer le plus récent
-        customer = customersByEmail.data.sort((a, b) => b.created - a.created)[0]
-        console.log(`[sync-subscription] Found customer by email: ${customer.id}, created: ${new Date(customer.created * 1000).toISOString()}`)
+        if (customersByEmail.data.length > 0) {
+          // Prendre le customer le plus récent
+          customer = customersByEmail.data.sort((a, b) => b.created - a.created)[0]
+          console.log(`[sync-subscription] Found customer by email: ${customer.id}, created: ${new Date(customer.created * 1000).toISOString()}`)
+        }
       }
 
       // Méthode 2: Si pas trouvé par email, chercher par metadata user_id
