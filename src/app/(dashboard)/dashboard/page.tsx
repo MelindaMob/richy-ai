@@ -46,6 +46,9 @@ export default async function DashboardPage() {
     .maybeSingle()
   
   // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'dashboard:45',message:'H2/H3/H4: DASHBOARD - Query subscription',data:{dashboard_user_id:user.id,subscription_found:!!subscription,subscription_user_id:subscription?.user_id,subscription_plan_type:subscription?.plan_type,subscription_error:subscriptionError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+  // #endregion
+  
   console.log('🔴 [DASHBOARD SERVER] Subscription query:', {
     user_id: user.id,
     subscription_found: !!subscription,
@@ -54,10 +57,10 @@ export default async function DashboardPage() {
       id: subscription.id,
       plan_type: subscription.plan_type,
       status: subscription.status,
-      stripe_subscription_id: subscription.stripe_subscription_id
+      stripe_subscription_id: subscription.stripe_subscription_id,
+      user_id: subscription.user_id
     } : null
   })
-  // #endregion
 
   // #region agent log - Dashboard subscription data
   console.log('🔴 [DASHBOARD] Subscription data from DB:', JSON.stringify({

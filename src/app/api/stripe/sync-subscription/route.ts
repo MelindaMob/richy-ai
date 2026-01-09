@@ -301,6 +301,10 @@ export async function POST(req: NextRequest) {
     console.log('[sync-subscription] 🔴 plan_type qui sera inséré:', subscriptionData.plan_type)
     // #endregion
     
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:304',message:'H1/H2/H3/H4: AVANT UPSERT - finalUserId et subscriptionData',data:{finalUserId,subscriptionData_user_id:subscriptionData.user_id,subscriptionData_plan_type:subscriptionData.plan_type,subscriptionData_status:subscriptionData.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    
     const { error: upsertError, data: upsertedData } = await supabase
       .from('subscriptions')
       .upsert(subscriptionData, {
@@ -309,6 +313,9 @@ export async function POST(req: NextRequest) {
       .select()
 
     // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:312',message:'H1/H2/H3/H4: APRÈS UPSERT - Résultat',data:{upsertError:upsertError?.message,upsertedData_length:upsertedData?.length,upsertedData_user_id:upsertedData?.[0]?.user_id,upsertedData_plan_type:upsertedData?.[0]?.plan_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
+    
     console.log('[sync-subscription] 🔴 APRÈS UPSERT - Données retournées:', JSON.stringify(upsertedData, null, 2))
     if (upsertedData && upsertedData.length > 0) {
       console.log('[sync-subscription] 🔴 plan_type dans la DB après upsert:', upsertedData[0]?.plan_type)
@@ -316,10 +323,12 @@ export async function POST(req: NextRequest) {
     } else {
       console.log('[sync-subscription] ⚠️ Aucune donnée retournée par l\'upsert !')
     }
-    // #endregion
 
     if (upsertError) {
       console.error('[sync-subscription] ❌ Error upserting subscription:', upsertError)
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:323',message:'H1: UPSERT ERROR',data:{error:upsertError.message,code:upsertError.code,details:upsertError.details},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+      // #endregion
       throw upsertError
     }
     
@@ -331,13 +340,16 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
     
     // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:332',message:'H2/H3/H4: VÉRIFICATION POST-UPSERT',data:{subscription_found:!!verifySubscription,verify_user_id:verifySubscription?.user_id,verify_plan_type:verifySubscription?.plan_type,verify_error:verifyError?.message,query_user_id:finalUserId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
+    
     console.log('[sync-subscription] 🔴 VÉRIFICATION POST-UPSERT:', {
       subscription_found: !!verifySubscription,
       plan_type: verifySubscription?.plan_type,
       user_id: verifySubscription?.user_id,
-      verify_error: verifyError?.message
+      verify_error: verifyError?.message,
+      query_user_id: finalUserId
     })
-    // #endregion
 
     // IMPORTANT: Mettre à jour le profil avec stripe_customer_id pour que le middleware laisse passer
     const stripeCustomerId = typeof stripeSubscription.customer === 'string' 
