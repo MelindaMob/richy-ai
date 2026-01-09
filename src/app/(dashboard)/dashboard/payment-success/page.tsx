@@ -59,53 +59,49 @@ function PaymentSuccessContent() {
         // IMPORTANT: Cette étape doit TOUJOURS être exécutée avant toute redirection
         console.log('[payment-success] 🔄 Synchronisation de la subscription AVANT redirection')
         
-        // Essayer plusieurs fois de synchroniser la subscription (retry logic)
+        // Tentative de synchronisation avec retry intelligent
         let data: any = { success: false }
-        let syncAttempts = 0
-        const maxSyncAttempts = 5
+        let syncSuccess = false
         
-        while (!data.success && syncAttempts < maxSyncAttempts) {
-          syncAttempts++
-          console.log(`[payment-success] Tentative de synchronisation ${syncAttempts}/${maxSyncAttempts}`)
-          
+        // Essayer 2 fois maximum avec un délai entre les tentatives
+        for (let attempt = 1; attempt <= 2; attempt++) {
           try {
+            console.log(`[payment-success] Tentative de synchronisation ${attempt}/2`)
             const response = await fetch('/api/stripe/sync-subscription', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                userId: createAccountData?.userId || undefined // Passer userId si disponible (pour nouvelles inscriptions)
+                userId: createAccountData?.userId || undefined
               })
             })
             
-            if (!response.ok) {
-              console.error(`[payment-success] ❌ Erreur HTTP ${response.status} lors de la synchronisation`)
-              if (syncAttempts < maxSyncAttempts) {
-                await new Promise(resolve => setTimeout(resolve, 1000 * syncAttempts)) // Attendre de plus en plus longtemps
-                continue
+            if (response.ok) {
+              data = await response.json()
+              console.log('[payment-success] ✅ Subscription synced:', data)
+              if (data.success || data.subscription) {
+                syncSuccess = true
+                break // Succès, on sort de la boucle
               }
-            }
-            
-            data = await response.json()
-            console.log(`[payment-success] Subscription synced (tentative ${syncAttempts}):`, data)
-            
-            if (data.success || data.subscription) {
-              // Vérifier que la subscription est bien dans la DB en attendant un peu
-              await new Promise(resolve => setTimeout(resolve, 1000))
-              break
-            } else if (syncAttempts < maxSyncAttempts) {
-              console.log(`[payment-success] Synchronisation non réussie, nouvelle tentative dans ${syncAttempts} seconde(s)...`)
-              await new Promise(resolve => setTimeout(resolve, 1000 * syncAttempts))
+            } else if (response.status === 404) {
+              console.warn(`[payment-success] ⚠️ Route non trouvée (404), le webhook créera la subscription`)
+              break // Ne pas retry si 404
+            } else {
+              console.warn(`[payment-success] ⚠️ Erreur HTTP ${response.status} lors de la synchronisation`)
             }
           } catch (error) {
-            console.error(`[payment-success] Erreur lors de la tentative ${syncAttempts}:`, error)
-            if (syncAttempts < maxSyncAttempts) {
-              await new Promise(resolve => setTimeout(resolve, 1000 * syncAttempts))
-            }
+            console.warn(`[payment-success] ⚠️ Erreur lors de la tentative ${attempt}:`, error)
+          }
+          
+          // Attendre un peu avant la prochaine tentative (sauf si c'est la dernière)
+          if (attempt < 2) {
+            await new Promise(resolve => setTimeout(resolve, 500))
           }
         }
         
-        if (!data.success && syncAttempts >= maxSyncAttempts) {
-          console.warn('[payment-success] ⚠️ Impossible de synchroniser après plusieurs tentatives, le webhook devrait créer la subscription')
+        // Si la synchronisation n'a pas réussi, attendre un peu pour que le webhook arrive
+        if (!syncSuccess) {
+          console.log('[payment-success] ⏳ Synchronisation non réussie, attente 2 secondes pour le webhook...')
+          await new Promise(resolve => setTimeout(resolve, 2000))
         }
         
         // 3. Maintenant, gérer la redirection selon le type de compte créé

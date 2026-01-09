@@ -86,6 +86,14 @@ export default async function DashboardPage() {
   // Si la subscription a un trial_ends_at dans le futur, c'est un trial actif
   const isCurrentlyTrial = subscription?.trial_ends_at && new Date(subscription.trial_ends_at) > new Date()
   
+  // Si pas de subscription mais qu'on a un stripe_customer_id, on est probablement en train d'être créé
+  // Dans ce cas, on affiche un état "pending" plutôt que "premium"
+  if (!subscription && profile?.stripe_customer_id) {
+    // Ne pas forcer hasTrialLimitations à true, mais ne pas non plus afficher "Premium"
+    // Le DashboardDebugLogs va synchroniser automatiquement
+    subscriptionStatus = 'pending'
+  }
+  
   // Si c'est un plan trial, forcer les limitations et calculer les jours
   if (isTrialPlan) {
     hasTrialLimitations = true

@@ -37,6 +37,11 @@ export function DashboardDebugLogs({
       
       const syncAndCheck = async () => {
         try {
+          // Attendre un peu avant la première tentative (pour laisser le temps au webhook)
+          if (checkAttempts === 0) {
+            await new Promise(resolve => setTimeout(resolve, 1500))
+          }
+          
           // Appeler sync-subscription
           const response = await fetch('/api/stripe/sync-subscription', {
             method: 'POST',
@@ -44,22 +49,41 @@ export function DashboardDebugLogs({
             body: JSON.stringify({ userId: user?.id })
           })
           
+          if (!response.ok) {
+            console.warn(`[DashboardDebugLogs] ⚠️ Erreur HTTP ${response.status} lors de la synchronisation`)
+            if (checkAttempts < 2) {
+              // Réessayer après un délai plus long
+              await new Promise(resolve => setTimeout(resolve, 3000))
+              setIsChecking(false)
+            } else {
+              setIsChecking(false)
+            }
+            return
+          }
+          
           const data = await response.json()
           console.log('[DashboardDebugLogs] Réponse sync-subscription:', data)
           
           if (data.success || data.subscription) {
             // Attendre un peu puis recharger la page
             console.log('[DashboardDebugLogs] ✅ Subscription synchronisée, rechargement de la page...')
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            await new Promise(resolve => setTimeout(resolve, 500))
             router.refresh()
           } else {
             // Réessayer après un délai
-            console.log('[DashboardDebugLogs] ⏳ Subscription pas encore disponible, nouvelle tentative dans 2 secondes...')
-            await new Promise(resolve => setTimeout(resolve, 2000))
-            setIsChecking(false)
+            if (checkAttempts < 2) {
+              console.log('[DashboardDebugLogs] ⏳ Subscription pas encore disponible, nouvelle tentative dans 3 secondes...')
+              await new Promise(resolve => setTimeout(resolve, 3000))
+              setIsChecking(false)
+            } else {
+              setIsChecking(false)
+            }
           }
         } catch (error) {
           console.error('[DashboardDebugLogs] Erreur lors de la synchronisation:', error)
+          if (checkAttempts < 2) {
+            await new Promise(resolve => setTimeout(resolve, 3000))
+          }
           setIsChecking(false)
         }
       }
