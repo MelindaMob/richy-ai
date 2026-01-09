@@ -349,7 +349,7 @@ export async function POST(req: NextRequest) {
       const { error: profileUpdateError } = await supabase
         .from('profiles')
         .update({ stripe_customer_id: stripeCustomerId })
-        .eq('id', user.id)
+        .eq('id', finalUserId)
       
       if (profileUpdateError) {
         console.error('[sync-subscription] Erreur mise à jour profil avec stripe_customer_id:', profileUpdateError)
