@@ -1,9 +1,12 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface DashboardDebugLogsProps {
   subscription: any
+  profile?: any
+  user?: any
   hasTrialLimitations: boolean
   subscriptionStatus: string
   trialDaysLeft: number
@@ -12,11 +15,59 @@ interface DashboardDebugLogsProps {
 
 export function DashboardDebugLogs({
   subscription,
+  profile,
+  user,
   hasTrialLimitations,
   subscriptionStatus,
   trialDaysLeft,
   isTrialPlan
 }: DashboardDebugLogsProps) {
+  const router = useRouter()
+  const [isChecking, setIsChecking] = useState(false)
+  const [checkAttempts, setCheckAttempts] = useState(0)
+
+  // Vérifier et synchroniser la subscription si elle n'est pas trouvée
+  useEffect(() => {
+    // Si pas de subscription mais qu'on a un stripe_customer_id, essayer de synchroniser
+    if (!subscription && profile?.stripe_customer_id && !isChecking && checkAttempts < 3) {
+      setIsChecking(true)
+      setCheckAttempts(prev => prev + 1)
+      
+      console.log(`[DashboardDebugLogs] ⚠️ Pas de subscription trouvée, tentative de synchronisation ${checkAttempts + 1}/3`)
+      
+      const syncAndCheck = async () => {
+        try {
+          // Appeler sync-subscription
+          const response = await fetch('/api/stripe/sync-subscription', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: user?.id })
+          })
+          
+          const data = await response.json()
+          console.log('[DashboardDebugLogs] Réponse sync-subscription:', data)
+          
+          if (data.success || data.subscription) {
+            // Attendre un peu puis recharger la page
+            console.log('[DashboardDebugLogs] ✅ Subscription synchronisée, rechargement de la page...')
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            router.refresh()
+          } else {
+            // Réessayer après un délai
+            console.log('[DashboardDebugLogs] ⏳ Subscription pas encore disponible, nouvelle tentative dans 2 secondes...')
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            setIsChecking(false)
+          }
+        } catch (error) {
+          console.error('[DashboardDebugLogs] Erreur lors de la synchronisation:', error)
+          setIsChecking(false)
+        }
+      }
+      
+      syncAndCheck()
+    }
+  }, [subscription, profile?.stripe_customer_id, isChecking, checkAttempts, user?.id, router])
+
   useEffect(() => {
     // Log principal avec style
     console.log(

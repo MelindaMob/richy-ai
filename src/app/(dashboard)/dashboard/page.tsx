@@ -145,6 +145,8 @@ export default async function DashboardPage() {
       {/* Debug Logs Component */}
       <DashboardDebugLogs
         subscription={subscription}
+        profile={profile}
+        user={user}
         hasTrialLimitations={hasTrialLimitations}
         subscriptionStatus={subscriptionStatus}
         trialDaysLeft={trialDaysLeft}
