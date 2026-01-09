@@ -10,8 +10,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 })
 
 export async function POST(req: NextRequest) {
-  console.log('[sync-subscription] POST request received')
-  
   try {
     const supabase = await createClient()
     const adminSupabase = createAdminClient()
@@ -27,21 +25,13 @@ export async function POST(req: NextRequest) {
     let finalUserId: string | null = null
     if (user) {
       finalUserId = user.id
-      console.log('[sync-subscription] 🔴 User authenticated:', {
-        user_id: user.id,
-        email: user.email,
-        session_active: true
-      })
     } else if (userIdFromBody) {
       finalUserId = userIdFromBody
-      console.log('[sync-subscription] ⚠️ Pas de session active, utilisation userId depuis body:', userIdFromBody)
     } else {
-      console.error('[sync-subscription] ❌ No user found and no userId in body')
       return NextResponse.json({ error: 'Non autorisé - aucune session et aucun userId fourni' }, { status: 401 })
     }
     
     if (!finalUserId) {
-      console.error('[sync-subscription] No user found')
       return NextResponse.json({ error: 'Non autorisé' }, { status: 401 })
     }
 
@@ -52,14 +42,6 @@ export async function POST(req: NextRequest) {
       .select('*')
       .eq('user_id', finalUserId)
       .maybeSingle()
-    
-    // #region agent log
-    console.log('[sync-subscription] 🔴 Subscription existante dans DB:', subscription ? {
-      plan_type: subscription.plan_type,
-      status: subscription.status,
-      stripe_subscription_id: subscription.stripe_subscription_id
-    } : 'aucune')
-    // #endregion
 
     let stripeSubscription: Stripe.Subscription | null = null
     let customerId: string | null = null
@@ -67,13 +49,10 @@ export async function POST(req: NextRequest) {
     // Récupérer le customer_id depuis la DB
     if (subscription?.stripe_customer_id) {
       customerId = subscription.stripe_customer_id
-      console.log(`[sync-subscription] Using customer_id from DB: ${customerId}`)
     }
 
     // Si pas de customer_id, chercher dans Stripe
     if (!customerId) {
-      console.log(`[sync-subscription] No customer_id in DB, searching in Stripe for user ${finalUserId}`)
-      
       // Récupérer l'email depuis le profil si user n'est pas disponible
       let userEmail: string | null = null
       if (user?.email) {
@@ -93,25 +72,20 @@ export async function POST(req: NextRequest) {
       // Méthode 1: Chercher le customer Stripe par email (normalisé) si email disponible
       if (userEmail) {
         const normalizedEmail = userEmail.trim().toLowerCase()
-        console.log(`[sync-subscription] Searching for customer with email: ${normalizedEmail}`)
         
         const customersByEmail = await stripe.customers.list({
           email: normalizedEmail,
           limit: 100
         })
 
-        console.log(`[sync-subscription] Found ${customersByEmail.data.length} customer(s) by email`)
-
         if (customersByEmail.data.length > 0) {
           // Prendre le customer le plus récent
           customer = customersByEmail.data.sort((a, b) => b.created - a.created)[0]
-          console.log(`[sync-subscription] Found customer by email: ${customer.id}, created: ${new Date(customer.created * 1000).toISOString()}`)
         }
       }
 
       // Méthode 2: Si pas trouvé par email, chercher par metadata user_id
       if (!customer) {
-        console.log(`[sync-subscription] Customer not found by email, searching by metadata user_id`)
         const allCustomers = await stripe.customers.list({
           limit: 100
         })
@@ -119,7 +93,6 @@ export async function POST(req: NextRequest) {
         for (const c of allCustomers.data) {
           if (c.metadata?.user_id === finalUserId) {
             customer = c
-            console.log(`[sync-subscription] Found customer by metadata user_id: ${customer.id}`)
             break
           }
         }
@@ -139,8 +112,6 @@ export async function POST(req: NextRequest) {
         limit: 100
       })
 
-      console.log(`[sync-subscription] Found ${subscriptions.data.length} subscription(s) for customer ${customerId}`)
-
       if (subscriptions.data.length > 0) {
         // Trier toutes les subscriptions par created (plus récent en premier)
         const sortedSubs = subscriptions.data.sort((a, b) => b.created - a.created)
@@ -153,7 +124,6 @@ export async function POST(req: NextRequest) {
         
         if (activeUpgrade) {
           stripeSubscription = activeUpgrade
-          console.log(`[sync-subscription] Using active upgrade subscription: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
         } else {
           // Sinon, prendre la plus récente active/trialing
           const activeSub = sortedSubs.find(sub => 
@@ -162,11 +132,9 @@ export async function POST(req: NextRequest) {
           
           if (activeSub) {
             stripeSubscription = activeSub
-            console.log(`[sync-subscription] Using most recent active subscription: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
           } else {
             // En dernier recours, prendre la plus récente même si canceled (peut être un upgrade récent)
             stripeSubscription = sortedSubs[0]
-            console.log(`[sync-subscription] Using most recent subscription (may be canceled): ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
           }
         }
       }
@@ -176,29 +144,19 @@ export async function POST(req: NextRequest) {
     if (!stripeSubscription && subscription?.stripe_subscription_id) {
       try {
         stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripe_subscription_id)
-        console.log(`[sync-subscription] Retrieved subscription from DB: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
       } catch (error: any) {
-        console.error(`[sync-subscription] Error retrieving subscription ${subscription.stripe_subscription_id}:`, error)
+        // Ignorer l'erreur
       }
     }
 
     if (!stripeSubscription) {
-      console.error(`[sync-subscription] No subscription found in Stripe for user ${finalUserId}`)
-      
       // IMPORTANT: Même si on ne trouve pas de subscription, mettre à jour le profil avec stripe_customer_id
       // pour que le middleware laisse passer (le webhook créera la subscription plus tard)
       if (customerId) {
-        console.log('[sync-subscription] Subscription non trouvée mais customerId existe, mise à jour profil:', customerId)
-        const { error: profileUpdateError } = await supabase
+        await supabase
           .from('profiles')
           .update({ stripe_customer_id: customerId })
           .eq('id', finalUserId)
-        
-        if (profileUpdateError) {
-          console.error('[sync-subscription] Erreur mise à jour profil avec stripe_customer_id:', profileUpdateError)
-        } else {
-          console.log('[sync-subscription] ✅ Profil mis à jour avec stripe_customer_id (subscription pas encore disponible)')
-        }
       }
       
       return NextResponse.json({ 
@@ -215,10 +173,6 @@ export async function POST(req: NextRequest) {
     const planTypeFromMetadata = stripeSubscription.metadata?.plan_type
     const isUpgradeFromMetadata = stripeSubscription.metadata?.is_upgrade === 'true'
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:174',message:'H5/H6: Metadata sync-subscription',data:{planTypeFromMetadata,isUpgradeFromMetadata,hasTrialEnd,subscription_status:stripeSubscription.status,trial_end:stripeSubscription.trial_end},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
-    
     // C'est Premium si :
     // 1. C'est un upgrade explicite (is_upgrade === 'true')
     // 2. OU plan_type === 'direct' dans les metadata
@@ -226,14 +180,6 @@ export async function POST(req: NextRequest) {
     const isPremium = isUpgradeFromMetadata || 
                      planTypeFromMetadata === 'direct' ||
                      (!hasTrialEnd && stripeSubscription.status === 'active' && planTypeFromMetadata !== 'trial')
-
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:183',message:'H5/H6: isPremium calculé',data:{isPremium,isUpgradeFromMetadata,planTypeIsDirect:planTypeFromMetadata==='direct',condition3:!hasTrialEnd&&stripeSubscription.status==='active'&&planTypeFromMetadata!=='trial'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
-
-    console.log(`[sync-subscription] User: ${finalUserId}, Status: ${stripeSubscription.status}, Trial end: ${stripeSubscription.trial_end}`)
-    console.log(`[sync-subscription] Metadata - plan_type: ${planTypeFromMetadata}, is_upgrade: ${isUpgradeFromMetadata}`)
-    console.log(`[sync-subscription] Is Premium: ${isPremium}`)
 
     // Déterminer le plan_type depuis les metadata Stripe (priorité absolue)
     // IMPORTANT: Si plan_type n'est pas dans les metadata, on doit le déduire depuis trial_end
@@ -243,33 +189,19 @@ export async function POST(req: NextRequest) {
     if (planTypeFromMetadata === 'trial' || planTypeFromMetadata === 'direct') {
       // Si plan_type est explicitement défini dans les metadata, l'utiliser
       finalPlanType = planTypeFromMetadata
-      console.log(`[sync-subscription] ✅ Plan type depuis metadata: ${finalPlanType}`)
     } else if (subscription?.plan_type === 'trial' || subscription?.plan_type === 'direct') {
       // Si plan_type n'est pas dans les metadata mais existe dans la DB, le conserver
       // (le webhook l'a probablement déjà défini correctement)
       finalPlanType = subscription.plan_type
-      console.log(`[sync-subscription] ⚠️ plan_type manquant dans metadata, conservation du plan_type existant dans DB: ${finalPlanType}`)
     } else if (hasTrialEnd) {
       // Si il y a un trial_end dans le futur, c'est un trial
       finalPlanType = 'trial'
-      console.log(`[sync-subscription] ⚠️ plan_type manquant dans metadata, déduit depuis trial_end (futur): ${finalPlanType}`)
     } else {
       // Dernier recours: déduire depuis isPremium (mais ce n'est pas fiable)
       finalPlanType = isPremium ? 'direct' : 'trial'
-      console.log(`[sync-subscription] ⚠️ plan_type déduit depuis isPremium (dernier recours): ${finalPlanType}`)
     }
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:203',message:'H5/H6: finalPlanType déterminé',data:{finalPlanType,planTypeFromMetadata,isPremium},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
-    
-    console.log(`[sync-subscription] Plan type final: ${finalPlanType} (metadata: ${planTypeFromMetadata}, isPremium: ${isPremium})`)
 
     // Créer ou mettre à jour la subscription dans la DB
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:217',message:'H5: subscriptionData avant insertion',data:{plan_type:finalPlanType,status:stripeSubscription.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
-    
     const subscriptionData = {
       user_id: finalUserId,
       stripe_customer_id: typeof stripeSubscription.customer === 'string' 
@@ -300,81 +232,28 @@ export async function POST(req: NextRequest) {
       .eq('user_id', finalUserId)
       .neq('stripe_subscription_id', stripeSubscription.id)
     
-    // #region agent log
-    console.log('[sync-subscription] 🔴 AVANT UPSERT - subscriptionData:', JSON.stringify(subscriptionData, null, 2))
-    console.log('[sync-subscription] 🔴 plan_type qui sera inséré:', subscriptionData.plan_type)
-    // #endregion
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:304',message:'H1/H2/H3/H4: AVANT UPSERT - finalUserId et subscriptionData',data:{finalUserId,subscriptionData_user_id:subscriptionData.user_id,subscriptionData_plan_type:subscriptionData.plan_type,subscriptionData_status:subscriptionData.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-    
     // Utiliser adminSupabase pour contourner RLS lors de l'upsert
-    const { error: upsertError, data: upsertedData } = await adminSupabase
+    const { error: upsertError } = await adminSupabase
       .from('subscriptions')
       .upsert(subscriptionData, {
         onConflict: 'user_id'
       })
       .select()
 
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:312',message:'H1/H2/H3/H4: APRÈS UPSERT - Résultat',data:{upsertError:upsertError?.message,upsertedData_length:upsertedData?.length,upsertedData_user_id:upsertedData?.[0]?.user_id,upsertedData_plan_type:upsertedData?.[0]?.plan_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-    // #endregion
-    
-    console.log('[sync-subscription] 🔴 APRÈS UPSERT - Données retournées:', JSON.stringify(upsertedData, null, 2))
-    if (upsertedData && upsertedData.length > 0) {
-      console.log('[sync-subscription] 🔴 plan_type dans la DB après upsert:', upsertedData[0]?.plan_type)
-      console.log('[sync-subscription] 🔴 user_id dans la DB après upsert:', upsertedData[0]?.user_id)
-    } else {
-      console.log('[sync-subscription] ⚠️ Aucune donnée retournée par l\'upsert !')
-    }
-
     if (upsertError) {
-      console.error('[sync-subscription] ❌ Error upserting subscription:', upsertError)
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:323',message:'H1: UPSERT ERROR',data:{error:upsertError.message,code:upsertError.code,details:upsertError.details},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
-      // #endregion
       throw upsertError
     }
     
-    // Vérifier que la subscription a bien été insérée en la relisant
-    // Utiliser adminSupabase pour contourner RLS
-    const { data: verifySubscription, error: verifyError } = await adminSupabase
-      .from('subscriptions')
-      .select('*')
-      .eq('user_id', finalUserId)
-      .maybeSingle()
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:332',message:'H2/H3/H4: VÉRIFICATION POST-UPSERT',data:{subscription_found:!!verifySubscription,verify_user_id:verifySubscription?.user_id,verify_plan_type:verifySubscription?.plan_type,verify_error:verifyError?.message,query_user_id:finalUserId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
-    
-    console.log('[sync-subscription] 🔴 VÉRIFICATION POST-UPSERT:', {
-      subscription_found: !!verifySubscription,
-      plan_type: verifySubscription?.plan_type,
-      user_id: verifySubscription?.user_id,
-      verify_error: verifyError?.message,
-      query_user_id: finalUserId
-    })
-
     // IMPORTANT: Mettre à jour le profil avec stripe_customer_id pour que le middleware laisse passer
     const stripeCustomerId = typeof stripeSubscription.customer === 'string' 
       ? stripeSubscription.customer 
       : stripeSubscription.customer.id
     
     if (stripeCustomerId) {
-      console.log('[sync-subscription] Mise à jour profil avec stripe_customer_id:', stripeCustomerId)
-      const { error: profileUpdateError } = await supabase
+      await supabase
         .from('profiles')
         .update({ stripe_customer_id: stripeCustomerId })
         .eq('id', finalUserId)
-      
-      if (profileUpdateError) {
-        console.error('[sync-subscription] Erreur mise à jour profil avec stripe_customer_id:', profileUpdateError)
-        // Ne pas bloquer, on continue
-      } else {
-        console.log('[sync-subscription] ✅ Profil mis à jour avec stripe_customer_id')
-      }
     }
 
     return NextResponse.json({ 
@@ -389,9 +268,6 @@ export async function POST(req: NextRequest) {
     })
 
   } catch (error: any) {
-    console.error('[sync-subscription] Unhandled error:', error)
-    console.error('[sync-subscription] Error stack:', error.stack)
-    
     return NextResponse.json(
       { 
         error: 'Erreur lors de la synchronisation', 

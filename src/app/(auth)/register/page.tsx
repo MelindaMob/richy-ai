@@ -244,7 +244,7 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Nom complet
+                Nom complet (facultatif)
               </label>
               <input
                 type="text"
@@ -257,7 +257,7 @@ export default function RegisterPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Entreprise
+                Entreprise (facultatif)
               </label>
               <input
                 type="text"

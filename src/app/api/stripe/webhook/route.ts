@@ -67,13 +67,9 @@ export async function POST(req: NextRequest) {
 
     const supabase = createClient() // Client admin (service role)
 
-    console.log(`[webhook] Received event: ${event.type}, id: ${event.id}`)
-
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session
-        
-        console.log(`[webhook] checkout.session.completed - Session: ${session.id}`)
         
         if (session.subscription && typeof session.subscription === 'string') {
           const subscription = await stripe.subscriptions.retrieve(session.subscription)
@@ -81,15 +77,7 @@ export async function POST(req: NextRequest) {
           let userId = subscription.metadata?.user_id as string | undefined
           
           // Déterminer le plan_type : utiliser les metadata si présents, sinon déduire depuis trial_end
-          console.log(`[webhook] 📋 Metadata subscription complètes:`, JSON.stringify(subscription.metadata, null, 2))
-          console.log(`[webhook] 📋 Metadata session complètes:`, JSON.stringify(session.metadata, null, 2))
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:87',message:'H4: Metadata webhook reçues',data:{subscription_metadata:subscription.metadata,session_metadata:session.metadata,subscription_plan_type:subscription.metadata?.plan_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-          // #endregion
-          
           let planType = subscription.metadata?.plan_type
-          console.log(`[webhook] plan_type depuis subscription.metadata:`, planType)
           
           // Si plan_type n'est pas dans les metadata, le déduire depuis trial_end
           if (!planType) {
@@ -97,64 +85,41 @@ export async function POST(req: NextRequest) {
             // Si il y a un trial_end dans le futur, c'est un trial
             // Sinon, c'est direct (mais on devrait normalement toujours avoir plan_type dans metadata)
             planType = hasTrialEnd ? 'trial' : 'direct'
-            console.log(`[webhook] ⚠️ plan_type manquant dans metadata, déduit depuis trial_end: ${planType}`)
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:96',message:'H4: planType déduit depuis trial_end',data:{planType,hasTrialEnd,trial_end:subscription.trial_end},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-            // #endregion
           }
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:98',message:'H4: planType final webhook',data:{planType,subscription_status:subscription.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
-          // #endregion
           
           const isUpgrade = subscription.metadata?.is_upgrade === 'true'
           const registrationToken = subscription.metadata?.registration_token || session.metadata?.registration_token
-          
-          console.log(`[webhook] Subscription metadata - userId: ${userId}, planType: ${planType}, isUpgrade: ${isUpgrade}`)
-          console.log(`[webhook] Subscription status: ${subscription.status}, trial_end: ${subscription.trial_end}`)
 
           // Si aucun user_id mais un registration_token est présent, créer le compte maintenant
           if (!userId && registrationToken) {
-            console.log('[webhook] Aucun user_id, tentative de création via registration_token:', registrationToken)
-            const { data: pendingReg, error: pendingError } = await supabase
+            const { data: pendingReg } = await supabase
               .from('pending_registrations')
               .select('*')
               .eq('token', registrationToken)
               .maybeSingle()
 
-            if (pendingError) {
-              console.error('[webhook] Erreur récupération pending_registrations:', pendingError)
-            }
-
             if (pendingReg) {
               const isExpired = pendingReg.expires_at && new Date(pendingReg.expires_at) < new Date()
-              if (isExpired) {
-                console.warn('[webhook] pending_registration expiré, abandon de la création de compte')
-              } else {
+              if (!isExpired) {
                 // Déchiffrer le mot de passe
                 // La colonne s'appelle password_hash dans la table
                 const passwordToDecrypt = pendingReg.password_hash || pendingReg.password_encrypted || pendingReg.password
                 if (!passwordToDecrypt) {
-                  console.error('[webhook] ❌ Aucun password trouvé dans pending_registration')
                   throw new Error('Password manquant dans pending_registration')
                 }
                 const decryptedPassword = decryptPassword(passwordToDecrypt)
 
-                const { data: createdUser, error: createUserError } = await supabase.auth.admin.createUser({
+                const { data: createdUser } = await supabase.auth.admin.createUser({
                   email: pendingReg.email,
                   password: decryptedPassword,
                   email_confirm: true
                 })
 
-                if (createUserError) {
-                  console.error('[webhook] Erreur création user via pending_registrations:', createUserError)
-                } else if (createdUser?.user) {
+                if (createdUser?.user) {
                   userId = createdUser.user.id
-                  console.log('[webhook] Utilisateur créé via pending_registrations:', userId)
 
                   // Créer le profil (sans phone_number car cette colonne n'existe pas dans profiles)
-                  const { error: profileError } = await supabase
+                  await supabase
                     .from('profiles')
                     .insert({
                       id: userId,
@@ -163,35 +128,20 @@ export async function POST(req: NextRequest) {
                       company_name: pendingReg.company_name || null
                       // Note: phone_number n'existe pas dans la table profiles
                     })
-                  if (profileError) {
-                    console.warn('[webhook] Erreur insertion profil:', profileError)
-                  }
 
                   // Marquer account_created dans phone_verifications
                   if (pendingReg.phone_verification_id) {
-                    console.log('[webhook] 🚀 Mise à jour phone_verifications.account_created pour:', pendingReg.phone_verification_id)
-                    const { data: updateData, error: phoneUpdateError } = await supabase
+                    await supabase
                       .from('phone_verifications')
                       .update({ account_created: true })
                       .eq('id', pendingReg.phone_verification_id)
-                      .select()
-                    if (phoneUpdateError) {
-                      console.error('[webhook] ❌ Erreur update phone_verifications.account_created:', phoneUpdateError)
-                    } else {
-                      console.log('[webhook] ✅ phone_verifications.account_created mis à jour:', updateData)
-                    }
-                  } else {
-                    console.warn('[webhook] ⚠️ Aucun phone_verification_id dans pending_registration')
                   }
 
                   // Nettoyer l'entrée temporaire
-                  const { error: deletePendingError } = await supabase
+                  await supabase
                     .from('pending_registrations')
                     .delete()
                     .eq('token', registrationToken)
-                  if (deletePendingError) {
-                    console.warn('[webhook] Erreur suppression pending_registrations:', deletePendingError)
-                  }
 
                   // Mettre à jour la subscription Stripe avec le user_id pour cohérence
                   try {
@@ -202,17 +152,14 @@ export async function POST(req: NextRequest) {
                       }
                     })
                   } catch (stripeUpdateError) {
-                    console.warn('[webhook] Impossible de mettre à jour la metadata user_id sur Stripe:', stripeUpdateError)
+                    // Ignorer l'erreur
                   }
                 }
               }
-            } else {
-              console.warn('[webhook] Aucun pending_registration trouvé pour registration_token:', registrationToken)
             }
           }
           
           if (!userId) {
-            console.warn('[webhook] Aucun user_id après tentative de résolution, abandon du traitement subscription')
             break
           }
 
@@ -224,8 +171,6 @@ export async function POST(req: NextRequest) {
           // 1. C'est un upgrade explicite
           // 2. OU planType === 'direct' ET pas de trial_end ET status === 'active'
           const isPremium = isUpgrade || (planType === 'direct' && !hasTrialEnd && subscription.status === 'active')
-          
-          console.log(`[webhook] planType: ${planType}, hasTrialEnd: ${hasTrialEnd}, isTrial: ${isTrial}, isPremium: ${isPremium}`)
           
           // Si c'est un upgrade ou Premium DIRECT (pas de trial), enlever les limitations
           if (isPremium && !isTrial) {
@@ -252,13 +197,12 @@ export async function POST(req: NextRequest) {
             })
             
             if (upsertError) {
-              console.error(`[webhook] Error upserting Premium subscription for user ${userId}:`, upsertError)
               throw upsertError
             }
             
             // Mettre à jour aussi la table profiles pour cohérence
             if (userId) {
-              const { error: profileError } = await supabase.from('profiles')
+              await supabase.from('profiles')
                 .update({
                   subscription_status: 'premium',
                   stripe_customer_id: session.customer as string,
@@ -266,14 +210,8 @@ export async function POST(req: NextRequest) {
                   trial_ends_at: null
                 })
                 .eq('id', userId)
-              
-              if (profileError) {
-                console.warn(`[webhook] Error updating profile for user ${userId}:`, profileError)
-                // Ne pas throw, ce n'est pas critique
-              }
             }
             
-            console.log(`✅ ${isUpgrade ? 'Upgrade' : 'Premium subscription'} completed for user ${userId}`)
             break
           }
           
@@ -294,8 +232,6 @@ export async function POST(req: NextRequest) {
           
           // Le status du profile dépend du plan_type choisi
           const profileStatus = finalPlanType === 'trial' ? 'trialing' : 'premium'
-          
-          console.log(`[webhook] Final plan_type: ${finalPlanType}, limitations:`, limitations, `profileStatus: ${profileStatus}`)
           
           // Mettre à jour la DB
           // D'abord, supprimer les anciennes subscriptions pour cet utilisateur (garder seulement la plus récente)
@@ -323,7 +259,6 @@ export async function POST(req: NextRequest) {
           })
           
           if (upsertError) {
-            console.error(`[webhook] Error upserting subscription for user ${userId}:`, upsertError)
             throw upsertError
           }
           
@@ -360,8 +295,6 @@ export async function POST(req: NextRequest) {
           ])
 
           if (profileResult.status === 'rejected' || (profileResult.status === 'fulfilled' && profileResult.value.error)) {
-            const error = profileResult.status === 'rejected' ? profileResult.reason : profileResult.value.error
-            console.warn(`[webhook] Error updating profile for user ${userId}:`, error)
             // Retry une fois
             if (userId) {
               await supabase.from('profiles')
@@ -376,15 +309,6 @@ export async function POST(req: NextRequest) {
                 .eq('id', userId)
             }
           }
-
-          if (eventResult.status === 'rejected' || (eventResult.status === 'fulfilled' && eventResult.value.error)) {
-            const error = eventResult.status === 'rejected' ? eventResult.reason : eventResult.value.error
-            console.warn(`[webhook] Error logging subscription event for user ${userId}:`, error)
-          }
-          
-          console.log(`✅ Subscription ${finalPlanType} created for user ${userId} with limitations:`, limitations)
-        } else {
-          console.warn(`[webhook] No subscription found in session ${session.id}`)
         }
         
         break

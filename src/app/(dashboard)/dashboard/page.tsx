@@ -3,20 +3,12 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { DashboardHeader } from './dashboard-header'
 import LockedAgentCard from './locked-agent-card'
-import { DashboardDebugLogs } from '@/components/DashboardDebugLogs'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
   
   // Vérifier l'authentification
   const { data: { user }, error } = await supabase.auth.getUser()
-  
-  // #region agent log
-  console.log('🔴 [DASHBOARD SERVER] User auth:', user ? {
-    id: user.id,
-    email: user.email
-  } : 'NO USER')
-  // #endregion
   
   if (!user) {
     redirect('/login')
@@ -29,51 +21,12 @@ export default async function DashboardPage() {
     .eq('id', user.id)
     .single()
 
-  // #region agent log
-  console.log('🔴 [DASHBOARD SERVER] Profile:', profile ? {
-    id: profile.id,
-    email: profile.email,
-    subscription_status: profile.subscription_status,
-    stripe_customer_id: profile.stripe_customer_id
-  } : 'NO PROFILE')
-  // #endregion
-
   // Récupérer la subscription depuis subscriptions table
-  const { data: subscription, error: subscriptionError } = await supabase
+  const { data: subscription } = await supabase
     .from('subscriptions')
     .select('*')
     .eq('user_id', user.id)
     .maybeSingle()
-  
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'dashboard:45',message:'H2/H3/H4: DASHBOARD - Query subscription',data:{dashboard_user_id:user.id,subscription_found:!!subscription,subscription_user_id:subscription?.user_id,subscription_plan_type:subscription?.plan_type,subscription_error:subscriptionError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
-  // #endregion
-  
-  console.log('🔴 [DASHBOARD SERVER] Subscription query:', {
-    user_id: user.id,
-    subscription_found: !!subscription,
-    subscription_error: subscriptionError?.message,
-    subscription_data: subscription ? {
-      id: subscription.id,
-      plan_type: subscription.plan_type,
-      status: subscription.status,
-      stripe_subscription_id: subscription.stripe_subscription_id,
-      user_id: subscription.user_id
-    } : null
-  })
-
-  // #region agent log - Dashboard subscription data
-  console.log('🔴 [DASHBOARD] Subscription data from DB:', JSON.stringify({
-    subscription_id: subscription?.id,
-    plan_type: subscription?.plan_type,
-    status: subscription?.status,
-    trial_ends_at: subscription?.trial_ends_at,
-    trial_limitations: subscription?.trial_limitations,
-    stripe_subscription_id: subscription?.stripe_subscription_id,
-    stripe_customer_id: subscription?.stripe_customer_id,
-    created_at: subscription?.created_at
-  }, null, 2))
-  // #endregion
 
   // Calculer les jours restants d'essai depuis subscriptions
   let trialDaysLeft = 0
@@ -137,30 +90,8 @@ export default async function DashboardPage() {
 
   const totalConversations = conversations?.length || 0
 
-  // #region agent log - Dashboard final values
-  console.log('🔴 [DASHBOARD] Final computed values:', JSON.stringify({
-    isTrialPlan,
-    isCurrentlyTrial,
-    hasTrialLimitations,
-    subscriptionStatus,
-    trialDaysLeft,
-    profile_subscription_status: profile?.subscription_status
-  }, null, 2))
-  // #endregion
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-richy-black to-richy-black-soft">
-      {/* Debug Logs Component */}
-      <DashboardDebugLogs
-        subscription={subscription}
-        profile={profile}
-        user={user}
-        hasTrialLimitations={hasTrialLimitations}
-        subscriptionStatus={subscriptionStatus}
-        trialDaysLeft={trialDaysLeft}
-        isTrialPlan={isTrialPlan}
-      />
-      
       {/* Header */}
       <DashboardHeader 
         trialDaysLeft={trialDaysLeft}

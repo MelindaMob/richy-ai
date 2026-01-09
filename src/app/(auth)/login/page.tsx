@@ -29,17 +29,55 @@ function LoginContent() {
     setLoading(true)
   
     try {
+      // Vérifier d'abord si l'email existe
+      const emailToCheck = email.trim().toLowerCase()
+      if (!emailToCheck) {
+        setError('Veuillez entrer votre email')
+        setLoading(false)
+        return
+      }
+
+      // Vérifier si l'email existe dans la base de données
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('email', emailToCheck)
+        .maybeSingle()
+
+      // Si l'email n'existe pas dans profiles, vérifier aussi dans auth.users
+      let emailExists = !!profile
+      if (!emailExists) {
+        try {
+          const checkResponse = await fetch('/api/auth/check-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailToCheck })
+          })
+          const checkData = await checkResponse.json()
+          emailExists = checkData.alreadyUsed === true
+        } catch (checkError) {
+          // Si la vérification échoue, on continue quand même avec la tentative de connexion
+        }
+      }
+
+      // Tentative de connexion
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(), // Nettoyer l'email
+        email: emailToCheck,
         password,
       })
   
       if (error) {
-        // Messages d'erreur en français
+        // Messages d'erreur en français avec distinction email/mot de passe
         if (error.message === 'Email not confirmed') {
           throw new Error('Email non confirmé. Vérifie tes emails.')
         } else if (error.message === 'Invalid login credentials') {
-          throw new Error('Email ou mot de passe incorrect')
+          // Si l'email existe, c'est le mot de passe qui est incorrect
+          if (emailExists) {
+            throw new Error('Mot de passe incorrect')
+          } else {
+            // Si l'email n'existe pas, c'est l'email qui est incorrect
+            throw new Error('Aucun compte trouvé avec cet email')
+          }
         }
         throw error
       }

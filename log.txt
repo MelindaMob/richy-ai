@@ -1,0 +1,569 @@
+# LOGS DE DÉBOGAGE - SAUVEGARDÉS POUR RÉFÉRENCE FUTURE
+# Date: $(date)
+# Ces logs ont été supprimés du code mais conservés ici au cas où ils seraient nécessaires
+
+## ============================================
+## FICHIER: src/app/api/stripe/sync-subscription/route.ts
+## ============================================
+
+// Ligne 13
+console.log('[sync-subscription] POST request received')
+
+// Ligne 30-34
+console.log('[sync-subscription] 🔴 User authenticated:', {
+  user_id: user.id,
+  email: user.email,
+  session_active: true
+})
+
+// Ligne 37
+console.log('[sync-subscription] ⚠️ Pas de session active, utilisation userId depuis body:', userIdFromBody)
+
+// Ligne 39
+console.error('[sync-subscription] ❌ No user found and no userId in body')
+
+// Ligne 44
+console.error('[sync-subscription] No user found')
+
+// Ligne 57-61
+console.log('[sync-subscription] 🔴 Subscription existante dans DB:', subscription ? {
+  plan_type: subscription.plan_type,
+  status: subscription.status,
+  stripe_subscription_id: subscription.stripe_subscription_id
+} : 'aucune')
+
+// Ligne 70
+console.log(`[sync-subscription] Using customer_id from DB: ${customerId}`)
+
+// Ligne 75
+console.log(`[sync-subscription] No customer_id in DB, searching in Stripe for user ${finalUserId}`)
+
+// Ligne 96
+console.log(`[sync-subscription] Searching for customer with email: ${normalizedEmail}`)
+
+// Ligne 103
+console.log(`[sync-subscription] Found ${customersByEmail.data.length} customer(s) by email`)
+
+// Ligne 108
+console.log(`[sync-subscription] Found customer by email: ${customer.id}, created: ${new Date(customer.created * 1000).toISOString()}`)
+
+// Ligne 114
+console.log(`[sync-subscription] Customer not found by email, searching by metadata user_id`)
+
+// Ligne 122
+console.log(`[sync-subscription] Found customer by metadata user_id: ${customer.id}`)
+
+// Ligne 142
+console.log(`[sync-subscription] Found ${subscriptions.data.length} subscription(s) for customer ${customerId}`)
+
+// Ligne 156
+console.log(`[sync-subscription] Using active upgrade subscription: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
+
+// Ligne 165
+console.log(`[sync-subscription] Using most recent active subscription: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
+
+// Ligne 169
+console.log(`[sync-subscription] Using most recent subscription (may be canceled): ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
+
+// Ligne 179
+console.log(`[sync-subscription] Retrieved subscription from DB: ${stripeSubscription.id}, status: ${stripeSubscription.status}`)
+
+// Ligne 181
+console.error(`[sync-subscription] Error retrieving subscription ${subscription.stripe_subscription_id}:`, error)
+
+// Ligne 186
+console.error(`[sync-subscription] No subscription found in Stripe for user ${finalUserId}`)
+
+// Ligne 191
+console.log('[sync-subscription] Subscription non trouvée mais customerId existe, mise à jour profil:', customerId)
+
+// Ligne 198
+console.error('[sync-subscription] Erreur mise à jour profil avec stripe_customer_id:', profileUpdateError)
+
+// Ligne 200
+console.log('[sync-subscription] ✅ Profil mis à jour avec stripe_customer_id (subscription pas encore disponible)')
+
+// Ligne 219 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:174',message:'H5/H6: Metadata sync-subscription',data:{planTypeFromMetadata,isUpgradeFromMetadata,hasTrialEnd,subscription_status:stripeSubscription.status,trial_end:stripeSubscription.trial_end},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+
+// Ligne 231 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:183',message:'H5/H6: isPremium calculé',data:{isPremium,isUpgradeFromMetadata,planTypeIsDirect:planTypeFromMetadata==='direct',condition3:!hasTrialEnd&&stripeSubscription.status==='active'&&planTypeFromMetadata!=='trial'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+
+// Ligne 234-236
+console.log(`[sync-subscription] User: ${finalUserId}, Status: ${stripeSubscription.status}, Trial end: ${stripeSubscription.trial_end}`)
+console.log(`[sync-subscription] Metadata - plan_type: ${planTypeFromMetadata}, is_upgrade: ${isUpgradeFromMetadata}`)
+console.log(`[sync-subscription] Is Premium: ${isPremium}`)
+
+// Ligne 246
+console.log(`[sync-subscription] ✅ Plan type depuis metadata: ${finalPlanType}`)
+
+// Ligne 251
+console.log(`[sync-subscription] ⚠️ plan_type manquant dans metadata, conservation du plan_type existant dans DB: ${finalPlanType}`)
+
+// Ligne 255
+console.log(`[sync-subscription] ⚠️ plan_type manquant dans metadata, déduit depuis trial_end (futur): ${finalPlanType}`)
+
+// Ligne 259
+console.log(`[sync-subscription] ⚠️ plan_type déduit depuis isPremium (dernier recours): ${finalPlanType}`)
+
+// Ligne 263 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:203',message:'H5/H6: finalPlanType déterminé',data:{finalPlanType,planTypeFromMetadata,isPremium},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+
+// Ligne 266
+console.log(`[sync-subscription] Plan type final: ${finalPlanType} (metadata: ${planTypeFromMetadata}, isPremium: ${isPremium})`)
+
+// Ligne 270 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:217',message:'H5: subscriptionData avant insertion',data:{plan_type:finalPlanType,status:stripeSubscription.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H5'})}).catch(()=>{});
+
+// Ligne 304-305
+console.log('[sync-subscription] 🔴 AVANT UPSERT - subscriptionData:', JSON.stringify(subscriptionData, null, 2))
+console.log('[sync-subscription] 🔴 plan_type qui sera inséré:', subscriptionData.plan_type)
+
+// Ligne 309 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:304',message:'H1/H2/H3/H4: AVANT UPSERT - finalUserId et subscriptionData',data:{finalUserId,subscriptionData_user_id:subscriptionData.user_id,subscriptionData_plan_type:subscriptionData.plan_type,subscriptionData_status:subscriptionData.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+
+// Ligne 321 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:312',message:'H1/H2/H3/H4: APRÈS UPSERT - Résultat',data:{upsertError:upsertError?.message,upsertedData_length:upsertedData?.length,upsertedData_user_id:upsertedData?.[0]?.user_id,upsertedData_plan_type:upsertedData?.[0]?.plan_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+
+// Ligne 324-329
+console.log('[sync-subscription] 🔴 APRÈS UPSERT - Données retournées:', JSON.stringify(upsertedData, null, 2))
+if (upsertedData && upsertedData.length > 0) {
+  console.log('[sync-subscription] 🔴 plan_type dans la DB après upsert:', upsertedData[0]?.plan_type)
+  console.log('[sync-subscription] 🔴 user_id dans la DB après upsert:', upsertedData[0]?.user_id)
+} else {
+  console.log('[sync-subscription] ⚠️ Aucune donnée retournée par l\'upsert !')
+}
+
+// Ligne 333
+console.error('[sync-subscription] ❌ Error upserting subscription:', upsertError)
+
+// Ligne 335 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:323',message:'H1: UPSERT ERROR',data:{error:upsertError.message,code:upsertError.code,details:upsertError.details},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+
+// Ligne 349 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:332',message:'H2/H3/H4: VÉRIFICATION POST-UPSERT',data:{subscription_found:!!verifySubscription,verify_user_id:verifySubscription?.user_id,verify_plan_type:verifySubscription?.plan_type,verify_error:verifyError?.message,query_user_id:finalUserId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+
+// Ligne 352-358
+console.log('[sync-subscription] 🔴 VÉRIFICATION POST-UPSERT:', {
+  subscription_found: !!verifySubscription,
+  plan_type: verifySubscription?.plan_type,
+  user_id: verifySubscription?.user_id,
+  verify_error: verifyError?.message,
+  query_user_id: finalUserId
+})
+
+// Ligne 366
+console.log('[sync-subscription] Mise à jour profil avec stripe_customer_id:', stripeCustomerId)
+
+// Ligne 373
+console.error('[sync-subscription] Erreur mise à jour profil avec stripe_customer_id:', profileUpdateError)
+
+// Ligne 376
+console.log('[sync-subscription] ✅ Profil mis à jour avec stripe_customer_id')
+
+// Ligne 392-393
+console.error('[sync-subscription] Unhandled error:', error)
+console.error('[sync-subscription] Error stack:', error.stack)
+
+
+## ============================================
+## FICHIER: src/app/api/stripe/create-checkout-session/route.ts
+## ============================================
+
+// Ligne 19
+console.warn('[create-checkout-session] REGISTRATION_ENCRYPTION_KEY manquante ou trop courte, fallback en clair')
+
+// Ligne 42 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-checkout-session:39',message:'H1: priceType reçu',data:{priceType,isUpgrade,hasPendingReg:!!pendingRegistration},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
+
+// Ligne 46-48
+console.log('[create-checkout-session] === DÉBUT ===')
+console.log('[create-checkout-session] pendingRegistration:', pendingRegistration ? 'présent' : 'absent', pendingRegistration)
+console.log('[create-checkout-session] priceType:', priceType)
+
+// Ligne 51
+console.log('[create-checkout-session] existingUser:', existingUser ? `présent (${existingUser.id}, ${existingUser.email})` : 'absent')
+
+// Ligne 57-58
+console.log('[create-checkout-session] isNewRegistration:', isNewRegistration, '(pendingRegistration présent:', !!pendingRegistration, ')')
+console.log('[create-checkout-session] pendingRegistration complet:', JSON.stringify(pendingRegistration, null, 2))
+
+// Ligne 62-63
+console.warn('[create-checkout-session] ⚠️ Nouvelle inscription détectée mais utilisateur connecté:', existingUser.email)
+console.warn('[create-checkout-session] ⚠️ Email de la nouvelle inscription:', pendingRegistration?.email)
+
+// Ligne 68
+console.log('[create-checkout-session] ⚠️ Ce n\'est PAS une nouvelle inscription, on ne va PAS insérer dans pending_registrations')
+
+// Ligne 73
+console.error('[create-checkout-session] NEXT_PUBLIC_APP_URL non défini')
+
+// Ligne 86 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-checkout-session:78',message:'H2: finalPriceType calculé',data:{finalPriceType,priceType,isUpgrade},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+
+// Ligne 89
+console.log('[create-checkout-session] finalPriceType déterminé:', finalPriceType, '(priceType:', priceType, ', isUpgrade:', isUpgrade, ')')
+
+// Ligne 92
+console.log('[create-checkout-session] ✅ Entrée dans le bloc isNewRegistration')
+
+// Ligne 101-108
+console.log('[create-checkout-session] Données extraites:', {
+  email: email || 'VIDE',
+  emailLength: email?.length || 0,
+  emailFromRegistration: registration.email || 'VIDE',
+  password: password ? 'présent' : 'absent',
+  phoneNumber: phoneNumber ? 'présent' : 'absent',
+  phoneVerificationId: phoneVerificationId ? 'présent' : 'absent'
+})
+
+// Ligne 111-116
+console.error('[create-checkout-session] ❌ Données incomplètes:', {
+  email: !!email,
+  password: !!password,
+  phoneNumber: !!phoneNumber,
+  phoneVerificationId: !!phoneVerificationId
+})
+
+// Ligne 130
+console.log('[create-checkout-session] Email déjà utilisé dans profiles:', email)
+
+// Ligne 144
+console.error('[create-checkout-session] Erreur vérif email admin:', listError)
+
+// Ligne 149
+console.log('[create-checkout-session] Email déjà utilisé dans auth.users:', email)
+
+// Ligne 180
+console.warn('[create-checkout-session] Password stocké en clair temporairement (clé manquante)')
+
+// Ligne 186
+console.error('[create-checkout-session] ❌ encrypted est null/undefined après fallback')
+
+// Ligne 196-197
+console.log('[create-checkout-session] 🚀 Tentative d\'insertion dans pending_registrations')
+console.log('[create-checkout-session] password_hash à insérer:', encrypted ? 'présent (' + encrypted.length + ' chars)' : 'VIDE')
+
+// Ligne 217-226
+console.log('[create-checkout-session] 📦 Données à insérer dans pending_registrations:', {
+  token: registrationToken,
+  email: email,
+  hasPasswordHash: !!insertData.password_hash,
+  passwordHashLength: insertData.password_hash?.length || 0,
+  phone_number: phoneNumber,
+  phone_verification_id: phoneVerificationId,
+  plan_type: insertData.plan_type,
+  expires_at: insertData.expires_at
+})
+
+// Ligne 234-241
+console.error('[create-checkout-session] ❌ Erreur insert pending_registrations:', pendingError)
+console.error('[create-checkout-session] Détails erreur complète:', JSON.stringify({
+  message: pendingError.message,
+  details: pendingError.details,
+  hint: pendingError.hint,
+  code: pendingError.code
+}, null, 2))
+console.error('[create-checkout-session] Données qui ont causé l\'erreur:', JSON.stringify(insertData, null, 2))
+
+// Ligne 249
+console.error('[create-checkout-session] ❌ Insertion réussie mais aucune donnée retournée')
+
+// Ligne 255-256
+console.log('[create-checkout-session] ✅ Insertion réussie dans pending_registrations:', pendingData)
+console.log('[create-checkout-session] ✅ ID de l\'entrée créée:', pendingData[0]?.id)
+
+// Ligne 259
+console.log('[create-checkout-session] 🔍 Vérification customer Stripe existant pour:', email)
+
+// Ligne 265
+console.log('[create-checkout-session] Customers Stripe trouvés avec cet email:', existingCustomers.data.length)
+
+// Ligne 268-274
+existingCustomers.data.forEach((c, idx) => {
+  console.log(`[create-checkout-session] Customer ${idx + 1}:`, {
+    id: c.id,
+    email: c.email,
+    created: new Date(c.created * 1000).toISOString(),
+    metadata: c.metadata
+  })
+})
+
+// Ligne 278-279
+console.log('[create-checkout-session] 🚀 Création client Stripe pour pending_registration')
+console.log('[create-checkout-session] Email utilisé pour customer Stripe:', email)
+
+// Ligne 288-293
+console.log('[create-checkout-session] ✅ Client Stripe créé:', {
+  customerId,
+  email: customer.email,
+  emailMatch: customer.email === email ? '✅ MATCH' : '❌ DIFFÉRENT',
+  created: new Date(customer.created * 1000).toISOString()
+})
+
+// Ligne 295
+console.log('[create-checkout-session] ⚠️ isNewRegistration est false, utilisation du flux utilisateur existant')
+
+// Ligne 317
+console.log('[create-checkout-session] Annulation de l\'ancienne subscription:', existingSub.stripe_subscription_id)
+
+// Ligne 322
+console.log('[create-checkout-session] ✅ Ancienne subscription annulée')
+
+// Ligne 324
+console.log('[create-checkout-session] ⚠️ Ancienne subscription déjà annulée ou inexistante, on continue')
+
+// Ligne 329
+console.log('[create-checkout-session] ⚠️ Ancienne subscription n\'existe plus dans Stripe, on continue:', existingSub.stripe_subscription_id)
+
+// Ligne 331
+console.error('[create-checkout-session] ❌ Erreur lors de l\'annulation de l\'ancienne subscription:', cancelError)
+
+// Ligne 340
+console.log('[create-checkout-session] Création du client Stripe pour user:', user.id)
+
+// Ligne 359
+console.log('[create-checkout-session] Mise à jour profil avec stripe_customer_id pour upgrade:', customerId)
+
+// Ligne 375
+console.log('[create-checkout-session] Vérification profil avec stripe_customer_id pour upgrade:', customerId)
+
+// Ligne 383
+console.log('[create-checkout-session] Mise à jour profil avec stripe_customer_id (manquant):', customerId)
+
+// Ligne 389
+console.log(`[create-checkout-session] Customer ${customerId} not found in Stripe, creating new one`)
+
+// Ligne 406
+console.log('[create-checkout-session] Mise à jour profil avec nouveau stripe_customer_id pour upgrade:', customerId)
+
+// Ligne 419
+console.error('[create-checkout-session] STRIPE_PRICE_DIRECT_ID non défini')
+
+// Ligne 429-433
+console.log('[create-checkout-session] 🔍 Customer vérifié avant session:', {
+  id: customerCheck.id,
+  email: (customerCheck as Stripe.Customer).email,
+  deleted: (customerCheck as Stripe.Customer).deleted || false
+})
+
+// Ligne 435
+console.error('[create-checkout-session] Erreur vérification customer:', err)
+
+// Ligne 440
+console.log('[create-checkout-session] 🚀 Création session checkout avec customerId:', customerId)
+
+// Ligne 450-453
+console.log('[create-checkout-session] 📧 Mise à jour email du customer:', {
+  ancien: currentCustomer.email,
+  nouveau: correctEmail
+})
+
+// Ligne 458
+console.log('[create-checkout-session] ✅ Email du customer mis à jour')
+
+// Ligne 460
+console.log('[create-checkout-session] ✅ Email du customer déjà correct')
+
+// Ligne 463
+console.error('[create-checkout-session] ❌ Erreur mise à jour email customer:', updateError)
+
+// Ligne 504 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'create-checkout-session:492',message:'H3: Metadata Stripe définies',data:{subscription_metadata_plan_type:finalPriceType,session_metadata_plan_type:finalPriceType,trial_period_days:finalPriceType==='trial'&&!isUpgrade?3:undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H3'})}).catch(()=>{});
+
+// Ligne 507-519
+console.log('[create-checkout-session] 📋 Metadata Stripe définies:', {
+  subscription_metadata: {
+    plan_type: finalPriceType,
+    is_upgrade: isUpgrade.toString(),
+    has_user_id: !!user?.id,
+    has_registration_token: !!registrationToken
+  },
+  session_metadata: {
+    plan_type: finalPriceType,
+    has_registration_token: !!registrationToken
+  },
+  trial_period_days: finalPriceType === 'trial' && !isUpgrade ? 3 : undefined
+})
+
+// Ligne 528
+console.error('[create-checkout-session] Erreur récupération customer depuis session:', err)
+
+// Ligne 532-533
+console.log(`[create-checkout-session] Session created: ${session.id}, plan_type: ${finalPriceType}, is_upgrade: ${isUpgrade}, registration_token: ${registrationToken}`)
+console.log(`[create-checkout-session] Email dans session customer: ${sessionCustomerEmail}`)
+
+// Ligne 540-547
+console.error('[create-checkout-session] ❌ ERREUR COMPLÈTE:', {
+  message: error?.message,
+  stack: error?.stack,
+  code: error?.code,
+  statusCode: error?.statusCode,
+  type: error?.type,
+  raw: error
+})
+
+
+## ============================================
+## FICHIER: src/app/(dashboard)/dashboard/payment-success/page.tsx
+## ============================================
+
+// Ligne 20
+console.log('[payment-success] 🚀 Début création compte et synchronisation')
+
+// Ligne 28
+console.log('[payment-success] Vérification du type de paiement pour session:', sessionId)
+
+// Ligne 36
+console.log('[payment-success] Nouvelle inscription détectée, création du compte')
+
+// Ligne 44
+console.log('[payment-success] Réponse create-account-from-session:', createAccountData)
+
+// Ligne 47
+console.log('[payment-success] ✅ Compte créé ou existe déjà:', createAccountData.userId)
+
+// Ligne 50
+console.log('[payment-success] Utilisateur existe déjà, synchronisation subscription puis redirection')
+
+// Ligne 54
+console.log('[payment-success] Upgrade détecté, pas de création de compte nécessaire')
+
+// Ligne 60
+console.log('[payment-success] 🔄 Synchronisation de la subscription AVANT redirection')
+
+// Ligne 69
+console.log(`[payment-success] Tentative de synchronisation ${attempt}/2`)
+
+// Ligne 80
+console.log('[payment-success] ✅ Subscription synced:', data)
+
+// Ligne 86
+console.warn(`[payment-success] ⚠️ Route non trouvée (404), le webhook créera la subscription`)
+
+// Ligne 89
+console.warn(`[payment-success] ⚠️ Erreur HTTP ${response.status} lors de la synchronisation`)
+
+// Ligne 92
+console.warn(`[payment-success] ⚠️ Erreur lors de la tentative ${attempt}:`, error)
+
+// Ligne 103
+console.log('[payment-success] ⏳ Synchronisation non réussie, attente 2 secondes pour le webhook...')
+
+// Ligne 111
+console.log('[payment-success] Connexion automatique via lien magique après sync')
+
+// Ligne 120
+console.log('[payment-success] Redirection vers callback avec magic link')
+
+// Ligne 125
+console.error('[payment-success] Erreur parsing lien magique:', e)
+
+// Ligne 130
+console.log('[payment-success] Redirection vers magic link (fallback)')
+
+// Ligne 136
+console.log('[payment-success] Pas de lien magique, redirection vers login')
+
+// Ligne 144
+console.log('[payment-success] ✅ Synchronisation réussie, attente 1.5 secondes puis redirection')
+
+// Ligne 146
+console.log('[payment-success] Redirection vers dashboard')
+
+// Ligne 150
+console.error('[payment-success] ❌ Synchronisation échouée:', data)
+
+// Ligne 152
+console.log('[payment-success] Attente 3 secondes au cas où le webhook arrive...')
+
+// Ligne 154
+console.log('[payment-success] Redirection vers dashboard (même si sync échouée)')
+
+// Ligne 159
+console.error('[payment-success] Error:', error)
+
+// Ligne 162
+console.log('[payment-success] Erreur capturée, attente 3 secondes puis redirection')
+
+
+## ============================================
+## FICHIER: src/app/(dashboard)/dashboard/page.tsx
+## ============================================
+
+// Ligne 15-18
+console.log('🔴 [DASHBOARD SERVER] User auth:', user ? {
+  id: user.id,
+  email: user.email
+} : 'NO USER')
+
+// Ligne 33-38
+console.log('🔴 [DASHBOARD SERVER] Profile:', profile ? {
+  id: profile.id,
+  email: profile.email,
+  subscription_status: profile.subscription_status,
+  stripe_customer_id: profile.stripe_customer_id
+} : 'NO PROFILE')
+
+// Ligne 49 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'dashboard:45',message:'H2/H3/H4: DASHBOARD - Query subscription',data:{dashboard_user_id:user.id,subscription_found:!!subscription,subscription_user_id:subscription?.user_id,subscription_plan_type:subscription?.plan_type,subscription_error:subscriptionError?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H2'})}).catch(()=>{});
+
+// Ligne 52-63
+console.log('🔴 [DASHBOARD SERVER] Subscription query:', {
+  user_id: user.id,
+  subscription_found: !!subscription,
+  subscription_error: subscriptionError?.message,
+  subscription_data: subscription ? {
+    id: subscription.id,
+    plan_type: subscription.plan_type,
+    status: subscription.status,
+    stripe_subscription_id: subscription.stripe_subscription_id,
+    user_id: subscription.user_id
+  } : null
+})
+
+// Ligne 66-75
+console.log('🔴 [DASHBOARD] Subscription data from DB:', JSON.stringify({
+  subscription_id: subscription?.id,
+  plan_type: subscription?.plan_type,
+  status: subscription?.status,
+  trial_ends_at: subscription?.trial_ends_at,
+  trial_limitations: subscription?.trial_limitations,
+  stripe_subscription_id: subscription?.stripe_subscription_id,
+  stripe_customer_id: subscription?.stripe_customer_id,
+  created_at: subscription?.created_at
+}, null, 2))
+
+// Ligne 141-148
+console.log('🔴 [DASHBOARD] Final computed values:', JSON.stringify({
+  isTrialPlan,
+  isCurrentlyTrial,
+  hasTrialLimitations,
+  subscriptionStatus,
+  trialDaysLeft,
+  profile_subscription_status: profile?.subscription_status
+}, null, 2))
+
+
+## ============================================
+## FICHIER: src/components/DashboardDebugLogs.tsx
+## ============================================
+
+// Tous les console.log, console.error, console.warn dans ce fichier sont des logs de débogage
+// Le composant entier est un composant de débogage qui affiche des logs dans la console
+// Voir le fichier complet pour tous les logs
+
+
+## ============================================
+## FICHIER: src/app/api/stripe/webhook/route.ts
+## ============================================
+
+// Ligne 87-88 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:87',message:'H4: Metadata webhook reçues',data:{subscription_metadata:subscription.metadata,session_metadata:session.metadata,subscription_plan_type:subscription.metadata?.plan_type},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+
+// Ligne 102-103 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:96',message:'H4: planType déduit depuis trial_end',data:{planType,hasTrialEnd,trial_end:subscription.trial_end},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+
+// Ligne 107-108 (fetch instrumentation)
+fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webhook:98',message:'H4: planType final webhook',data:{planType,subscription_status:subscription.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H4'})}).catch(()=>{});
+
