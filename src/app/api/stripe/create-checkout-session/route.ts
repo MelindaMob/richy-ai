@@ -153,8 +153,8 @@ export async function POST(req: NextRequest) {
         }, { status: 400 })
       }
 
-      // Vérifier phone_verifications
-      const { data: verification } = await supabase
+      // Vérifier phone_verifications (utiliser adminSupabase pour contourner RLS)
+      const { data: verification } = await adminSupabase
         .from('phone_verifications')
         .select('id, verified, account_created')
         .eq('id', phoneVerificationId)
@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
         expires_at: insertData.expires_at
       })
       
-      const { error: pendingError, data: pendingData } = await supabase
+      const { error: pendingError, data: pendingData } = await adminSupabase
         .from('pending_registrations')
         .insert(insertData)
         .select()
@@ -298,8 +298,8 @@ export async function POST(req: NextRequest) {
       }
       user = existingUser
 
-      // Check si déjà abonné
-      const { data: existingSubData } = await supabase
+      // Check si déjà abonné (utiliser adminSupabase pour contourner RLS)
+      const { data: existingSubData } = await adminSupabase
         .from('subscriptions')
         .select('*')
         .eq('user_id', user.id)
@@ -347,7 +347,7 @@ export async function POST(req: NextRequest) {
         })
         customerId = customer.id
 
-        await supabase.from('subscriptions').upsert({
+        await adminSupabase.from('subscriptions').upsert({
           user_id: user.id,
           stripe_customer_id: customerId,
           status: 'pending'
@@ -396,7 +396,7 @@ export async function POST(req: NextRequest) {
           })
           customerId = customer.id
 
-          await supabase.from('subscriptions').upsert({
+          await adminSupabase.from('subscriptions').upsert({
             user_id: user.id,
             stripe_customer_id: customerId,
             status: existingSub?.status || 'pending'

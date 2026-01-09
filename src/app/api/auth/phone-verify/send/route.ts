@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/admin'
 import twilio from 'twilio'
 import crypto from 'crypto'
 
@@ -24,7 +24,7 @@ function parsePhoneNumber(phone: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
     const { phone } = await req.json()
 
     if (!phone) {

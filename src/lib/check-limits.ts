@@ -1,12 +1,12 @@
 // lib/check-limits.ts
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/admin'
 
 export async function checkUsageLimits(
   userId: string,
   agentType: 'chat' | 'validator' | 'prompt' | 'builder'
 ) {
-  const supabase = await createClient()
+  const supabase = createClient()
   
   // 1. Récupérer subscription depuis subscriptions table
   const { data: subscription, error: subError } = await supabase

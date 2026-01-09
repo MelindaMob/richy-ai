@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createClient as createAdminClient } from '@/lib/supabase/admin'
 import Stripe from 'stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
   
   try {
     const supabase = await createClient()
+    const adminSupabase = createAdminClient()
     
     // Essayer de récupérer le userId depuis le body (pour les nouvelles inscriptions)
     const body = await req.json().catch(() => ({}))
@@ -44,7 +46,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Récupérer la subscription depuis la DB (pour avoir le customer_id)
-    let { data: subscription } = await supabase
+    // Utiliser adminSupabase pour contourner RLS
+    let { data: subscription } = await adminSupabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', finalUserId)
@@ -291,7 +294,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Supprimer les anciennes subscriptions pour cet utilisateur (garder seulement la plus récente)
-    await supabase.from('subscriptions')
+    // Utiliser adminSupabase pour contourner RLS
+    await adminSupabase.from('subscriptions')
       .delete()
       .eq('user_id', finalUserId)
       .neq('stripe_subscription_id', stripeSubscription.id)
@@ -305,7 +309,8 @@ export async function POST(req: NextRequest) {
     fetch('http://127.0.0.1:7242/ingest/d8a9e4b4-cd70-4c3a-a316-bdd5da8b9474',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'sync-subscription:304',message:'H1/H2/H3/H4: AVANT UPSERT - finalUserId et subscriptionData',data:{finalUserId,subscriptionData_user_id:subscriptionData.user_id,subscriptionData_plan_type:subscriptionData.plan_type,subscriptionData_status:subscriptionData.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'H1'})}).catch(()=>{});
     // #endregion
     
-    const { error: upsertError, data: upsertedData } = await supabase
+    // Utiliser adminSupabase pour contourner RLS lors de l'upsert
+    const { error: upsertError, data: upsertedData } = await adminSupabase
       .from('subscriptions')
       .upsert(subscriptionData, {
         onConflict: 'user_id'
@@ -333,7 +338,8 @@ export async function POST(req: NextRequest) {
     }
     
     // Vérifier que la subscription a bien été insérée en la relisant
-    const { data: verifySubscription, error: verifyError } = await supabase
+    // Utiliser adminSupabase pour contourner RLS
+    const { data: verifySubscription, error: verifyError } = await adminSupabase
       .from('subscriptions')
       .select('*')
       .eq('user_id', finalUserId)

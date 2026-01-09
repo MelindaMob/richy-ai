@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/admin'
 import crypto from 'crypto'
 
 function parsePhoneNumber(phone: string) {
@@ -10,7 +10,7 @@ function parsePhoneNumber(phone: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
+    const supabase = createClient()
     const { phone, code } = await req.json()
 
     if (!phone || !code) {
