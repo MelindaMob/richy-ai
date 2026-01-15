@@ -31,7 +31,7 @@ export const metadata: Metadata = {
     siteName: "RICHY.AI",
     images: [
       {
-        url: "/logo-richy.png",
+        url: "/richy-logo.jpg",
         width: 1200,
         height: 630,
         alt: "RICHY.AI",
@@ -42,11 +42,11 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "RICHY.AI - Ton assistant IA pour valider et construire ton SaaS",
     description: "Valide et construis ton SaaS avec l'IA. Pas de bullshit, que du concret.",
-    images: ["/logo-richy.png"],
+    images: ["/richy-logo.jpg"],
   },
   icons: {
-    icon: "/logo-richy.png",
-    apple: "/logo-richy.png",
+    icon: "/richy-logo.jpg",
+    apple: "/richy-logo.jpg",
   },
 };
 
