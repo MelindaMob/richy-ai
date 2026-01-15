@@ -38,7 +38,7 @@ export function DashboardHeader({
           <div className="flex items-center justify-between">
             {/* Logo */}
             <Link href="/dashboard" className="flex items-center gap-2">
-              <img src="/richy-logo.jpg" alt="Richy.ai" className="h-8 w-8" />
+              <img src="/logo-richy.png" alt="Richy.ai" className="h-8 w-8" />
               <span className="font-display text-2xl text-richy-gold hidden md:block">RICHY.AI</span>
             </Link>
 

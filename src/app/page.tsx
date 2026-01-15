@@ -40,7 +40,7 @@ export default function Home() {
       <header className="container mx-auto px-4 py-6 relative z-10">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <img src="/richy-logo.jpg" alt="RICHY.AI" className="h-8 w-8" />
+            <img src="/logo-richy.png" alt="RICHY.AI" className="h-8 w-8" />
             <span className="font-display text-2xl text-richy-gold">
               RICHY.AI
             </span>

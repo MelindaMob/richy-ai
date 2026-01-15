@@ -45,8 +45,8 @@ export const metadata: Metadata = {
     images: ["/richy-logo.jpg"],
   },
   icons: {
-    icon: "/richy-logo.jpg",
-    apple: "/richy-logo.jpg",
+    icon: "/logo-richy.png",
+    apple: "/logo-richy.png",
   },
 };
 
