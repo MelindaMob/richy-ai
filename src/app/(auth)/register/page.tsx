@@ -23,6 +23,114 @@ export default function RegisterPage() {
   const router = useRouter()
   const supabase = createClient()
 
+  // Domaines email autorisés
+  const ALLOWED_EMAIL_DOMAINS = [
+    // Gmail et Google
+    'gmail.com',
+    'googlemail.com',
+    // Microsoft
+    'outlook.com',
+    'hotmail.com',
+    'live.com',
+    'msn.com',
+    'hotmail.fr',
+    'outlook.fr',
+    // Yahoo
+    'yahoo.com',
+    'yahoo.fr',
+    'ymail.com',
+    // Orange
+    'orange.fr',
+    'wanadoo.fr',
+    // Free
+    'free.fr',
+    // SFR
+    'sfr.fr',
+    // Bouygues
+    'bbox.fr',
+    // Autres opérateurs français
+    'laposte.net',
+    'numericable.fr',
+    'club-internet.fr',
+    // Autres services populaires
+    'protonmail.com',
+    'proton.me',
+    'icloud.com',
+    'me.com',
+    'mac.com',
+    'aol.com',
+    'mail.com',
+    'zoho.com',
+    'yandex.com',
+    'gmx.com',
+    'gmx.fr',
+  ]
+
+  // Domaines email temporaires/suspects à bloquer
+  const BLOCKED_EMAIL_DOMAINS = [
+    '10minutemail.com',
+    'guerrillamail.com',
+    'tempmail.com',
+    'throwaway.email',
+    'mailinator.com',
+    'temp-mail.org',
+    'getnada.com',
+    'mohmal.com',
+    'fakeinbox.com',
+    'trashmail.com',
+    'sharklasers.com',
+    'grr.la',
+    'guerrillamailblock.com',
+    'pokemail.net',
+    'spam4.me',
+    'bccto.me',
+    'chitthi.in',
+    'dispostable.com',
+    'meltmail.com',
+    'mintemail.com',
+    'mytemp.email',
+    'tempail.com',
+    'tempr.email',
+    'tmpmail.org',
+    'yopmail.com',
+    'yopmail.fr',
+    'jetable.org',
+    'jetable.fr',
+  ]
+
+  // Validation du domaine email
+  const validateEmailDomain = (email: string): { valid: boolean; error: string | null } => {
+    if (!email || !email.includes('@')) {
+      return { valid: false, error: 'Format email invalide' }
+    }
+
+    const domain = email.split('@')[1]?.toLowerCase().trim()
+    
+    if (!domain) {
+      return { valid: false, error: 'Format email invalide' }
+    }
+
+    // Vérifier les domaines bloqués (emails temporaires)
+    if (BLOCKED_EMAIL_DOMAINS.some(blocked => domain === blocked || domain.endsWith('.' + blocked))) {
+      return { 
+        valid: false, 
+        error: 'Les emails temporaires ne sont pas autorisés. Utilisez une adresse email valide (Gmail, Outlook, Yahoo, Orange, etc.)' 
+      }
+    }
+
+    // Vérifier les domaines autorisés
+    const isAllowed = ALLOWED_EMAIL_DOMAINS.some(allowed => domain === allowed || domain.endsWith('.' + allowed))
+    
+    if (!isAllowed) {
+      return { 
+        valid: false, 
+        error: 'Domaine email non autorisé. Utilisez une adresse email valide (Gmail, Outlook, Yahoo, Orange, Free, SFR, etc.)' 
+      }
+    }
+
+    return { valid: true, error: null }
+  }
+
   // Validation du numéro de téléphone
   const validatePhoneNumber = (phone: string): { valid: boolean; error: string | null } => {
     // Enlever tous les espaces et caractères non numériques sauf +33
@@ -82,6 +190,15 @@ export default function RegisterPage() {
       }
 
       const emailToCheck = formData.email.trim().toLowerCase()
+      
+      // 1.1. Valider le domaine email
+      const emailDomainValidation = validateEmailDomain(emailToCheck)
+      if (!emailDomainValidation.valid) {
+        setEmailError(emailDomainValidation.error)
+        setLoading(false)
+        return
+      }
+      
       console.log('[register] Vérification de l\'email:', emailToCheck)
       
       try {
@@ -214,6 +331,18 @@ export default function RegisterPage() {
                   setFormData({...formData, email: e.target.value})
                   setEmailError(null) // Réinitialiser l'erreur quand l'utilisateur tape
                 }}
+                onBlur={(e) => {
+                  // Valider le domaine email au blur
+                  const emailValue = e.target.value.trim().toLowerCase()
+                  if (emailValue) {
+                    const validation = validateEmailDomain(emailValue)
+                    if (!validation.valid) {
+                      setEmailError(validation.error)
+                    } else {
+                      setEmailError(null)
+                    }
+                  }
+                }}
                 className={`w-full px-4 py-3 bg-richy-black border rounded-lg text-white placeholder-gray-500 focus:outline-none transition-colors ${
                   emailError ? 'border-red-500' : 'border-gray-700 focus:border-richy-gold'
                 }`}
@@ -328,7 +457,14 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={loading || !!phoneError || !!emailError || !validatePhoneNumber(formData.phone_number).valid || !formData.email.trim()}
+              disabled={
+                loading || 
+                !!phoneError || 
+                !!emailError || 
+                !validatePhoneNumber(formData.phone_number).valid || 
+                !formData.email.trim() ||
+                !validateEmailDomain(formData.email.trim().toLowerCase()).valid
+              }
               className="w-full bg-gradient-to-r from-richy-gold to-richy-gold-light text-richy-black font-bold py-3 px-6 rounded-lg hover:scale-105 transition-all duration-200 shadow-lg disabled:opacity-50 disabled:hover:scale-100 disabled:cursor-not-allowed"
             >
               {loading ? 'Vérification...' : 'Suivant →'}
